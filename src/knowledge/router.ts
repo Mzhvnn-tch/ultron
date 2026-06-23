@@ -221,7 +221,7 @@ const NEWS_ROUTES: KnowledgeRoute[] = [
           if (wiki?.extract) {
             results.push({
               title: `Wikipedia — ${wiki.title || "Strait of Hormuz"}`,
-              content: `📍 ${wiki.title || "Strait of Hormuz"}\n\n${wiki.extract.substring(0, 1000)}\n\n📎 ${wiki.content_urls?.desktop?.page || "https://en.wikipedia.org/wiki/Strait_of_Hormuz"}`,
+              content: `${wiki.title || "Strait of Hormuz"}\n\n${wiki.extract.substring(0, 1000)}\n\nSource: ${wiki.content_urls?.desktop?.page || "https://en.wikipedia.org/wiki/Strait_of_Hormuz"}`,
               sourceUrl: wiki.content_urls?.desktop?.page || "https://en.wikipedia.org/wiki/Strait_of_Hormuz",
               confidence: 0.9,
             });
@@ -243,7 +243,7 @@ const NEWS_ROUTES: KnowledgeRoute[] = [
           if (newsData?.articles) {
             for (const a of newsData.articles.slice(0, 5)) {
               results.push({
-                title: `📰 ${a.title}`,
+                title: `${a.title}`,
                 content: `${a.title}\nSumber: ${a.source?.name || a.url}\nTanggal: ${a.publishedAt || ""}\n\n${a.description || ""}`.substring(0, 500),
                 sourceUrl: a.url,
                 confidence: 0.8,
@@ -300,7 +300,7 @@ const NEWS_ROUTES: KnowledgeRoute[] = [
         const low = lowMatch?.[1] || "N/A";
         const prevClose = prevCloseMatch?.[1] || "N/A";
 
-        const resultStr = `📈 IHSG (Indeks Harga Saham Gabungan)
+        const resultStr = `IHSG (Indeks Harga Saham Gabungan)
 
 Harga: ${price}
 Buka: ${open} | Tinggi: ${high} | Rendah: ${low}
@@ -597,7 +597,7 @@ export class KnowledgeRouter {
 
         results.push({
           title: `Wikipedia — ${summary.title || title}`,
-          content: `📍 ${summary.title || title}${summary.description ? ` — ${summary.description}` : ""}\n\n${extract.substring(0, 2000)}\n\n📎 ${summary.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${encodedTitle}`}`,
+          content: `${summary.title || title}${summary.description ? ` - ${summary.description}` : ""}\n\n${extract.substring(0, 2000)}\n\nSource: ${summary.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${encodedTitle}`}`,
           sourceUrl: summary.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${encodedTitle}`,
           confidence: 0.85,
         });
@@ -624,7 +624,7 @@ export class KnowledgeRouter {
 
           results.push({
             title: `Wikipedia — ${summary.title}`,
-            content: `📍 ${summary.title}${summary.description ? ` — ${summary.description}` : ""}\n\n${summary.extract.substring(0, 2000)}\n\n📎 ${summary.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${encoded}`}`,
+            content: `${summary.title}${summary.description ? ` - ${summary.description}` : ""}\n\n${summary.extract.substring(0, 2000)}\n\nSource: ${summary.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${encoded}`}`,
             sourceUrl: summary.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${encoded}`,
             confidence: 0.85,
           });

@@ -632,7 +632,7 @@ Output: [
    * Generate a human-readable verification report.
    */
   generateReport(report: VerificationReport): string {
-    let output = `# 🔍 Verification Report\n\n`;
+    let output = `# Verification Report\n\n`;
     output += `**Query:** ${report.originalQuery}\n`;
     output += `**Overall Confidence:** ${(report.overallConfidence * 100).toFixed(0)}%\n`;
     output += `**Sources Used:** ${report.sourcesUsed.length}\n`;
@@ -641,9 +641,9 @@ Output: [
     output += `**Contradictions Found:** ${report.contradictions.length}\n\n`;
 
     if (report.verifiedClaims.length > 0) {
-      output += `## ✅ Verified Claims\n\n`;
+      output += `## Verified Claims\n\n`;
       for (const vc of report.verifiedClaims) {
-        const badge = vc.confidence >= 0.9 ? "🟢" : vc.confidence >= 0.8 ? "🟡" : "🟠";
+        const badge = vc.confidence >= 0.9 ? "[high]" : vc.confidence >= 0.8 ? "[med]" : "[low]";
         output += `### ${badge} ${vc.claim.substring(0, 200)}\n`;
         output += `- Confidence: ${(vc.confidence * 100).toFixed(0)}%\n`;
         output += `- Confirmed by ${vc.confirmationCount} independent sources\n`;
@@ -652,7 +652,7 @@ Output: [
     }
 
     if (report.contradictions.length > 0) {
-      output += `## ⚠️ Contradictions\n\n`;
+      output += `## Contradictions\n\n`;
       for (const c of report.contradictions) {
         output += `- **${c.claim}**\n`;
         output += `  - Sources A: ${c.sourcesA.slice(0, 2).join(", ")}\n`;
@@ -663,7 +663,7 @@ Output: [
     }
 
     if (report.rejectedClaims.length > 0) {
-      output += `## ❌ Rejected Claims (Below Threshold)\n\n`;
+      output += `## Rejected Claims (Below Threshold)\n\n`;
       for (const rc of report.rejectedClaims) {
         output += `- ${rc.claim.substring(0, 150)}... (${(rc.confidence * 100).toFixed(0)}%)\n`;
       }

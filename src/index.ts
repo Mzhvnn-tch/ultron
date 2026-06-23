@@ -20,10 +20,8 @@ import { config } from "./config.js";
  *  Agent discoverable & payable by other agents via CROO protocol
  */
 async function main() {
-  logger.info("═══════════════════════════════════════════");
-  logger.info("  Deep Research Agent v1.0.0");
-  logger.info("  4-Layer Autonomous Research Engine");
-  logger.info("═══════════════════════════════════════════");
+  logger.info("Deep Research Agent v1.0.0");
+  logger.info("4-Layer Autonomous Research Engine");
 
   // Initialize endpoint cache (SQLite)
   const cache = getEndpointCache();
@@ -31,7 +29,7 @@ async function main() {
 
   // Validate config
   if (!config.llm.apiKey) {
-    logger.warn("⚠ No LLM_API_KEY set — query decomposition & synthesis will use fallback heuristics");
+    logger.warn("No LLM_API_KEY set - query decomposition and synthesis will use fallback heuristics");
   }
 
   // Warm up browser pool (pre-launch 2 Chromium instances)

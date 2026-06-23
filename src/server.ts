@@ -320,7 +320,7 @@ export function startServer(): void {
         port: config.server.port,
         cap: config.cap.enabled ? "enabled" : "disabled",
       },
-      "🚀 Deep Research Agent server started"
+      "Deep Research Agent server started"
     );
 
     // Register with CAP if enabled

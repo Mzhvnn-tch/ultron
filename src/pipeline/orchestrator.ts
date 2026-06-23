@@ -200,7 +200,7 @@ export class ResearchOrchestrator {
         qualityScore,
         cacheStats: cache.stats(),
       },
-      "[Orchestrator] Research complete ✓"
+      "[Orchestrator] Research complete"
     );
 
     return result;
