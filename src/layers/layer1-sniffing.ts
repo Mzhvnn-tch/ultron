@@ -1,6 +1,6 @@
 import { config } from "../config.js";
 import { getEndpointCache } from "../cache/endpoint-cache.js";
-import { Browser, Page, CDPSession } from "playwright";
+import { Browser, Page } from "playwright";
 import { getBrowserPool } from "../browser/pool.js";
 import { logger } from "../utils/logger.js";
 import type { DiscoveredEndpoint } from "../types.js";
@@ -39,7 +39,6 @@ export class NetworkSniffer {
     const now = Date.now();
 
     let page: Page | null = null;
-    let cdp: CDPSession | null = null;
     let browser: Browser | null = null;
 
     try {
@@ -56,37 +55,45 @@ export class NetworkSniffer {
 
       page = await context.newPage();
 
-      // ─── CDP Network Capture ────────────────────────
-      cdp = await page.context().newCDPSession(page);
-      await cdp.send("Network.enable");
+      // Listen to responses natively in Playwright
+      page.on("response", async (response) => {
+        try {
+          const req = response.request();
+          const reqUrl = req.url();
+          const reqHeaders = req.headers();
+          const method = req.method();
+          const postData = req.postData() || undefined;
 
-      // Capture ALL requests
-      cdp.on("Network.requestWillBeSent", (params: any) => {
-        const reqUrl = params.request.url;
-        const isApi = this.isApiRequest(reqUrl, params.request.headers);
+          const status = response.status();
+          const responseHeaders = response.headers();
+          const contentType = responseHeaders["content-type"] || responseHeaders["Content-Type"] || "";
 
-        captured.push({
-          url: reqUrl,
-          method: params.request.method,
-          requestHeaders: params.request.headers,
-          postData: params.request.postData,
-          isApiCall: isApi,
-        });
-      });
+          const isApi = this.isApiRequest(reqUrl, reqHeaders) || contentType.toLowerCase().includes("json");
 
-      // Capture responses (to see if JSON content)
-      cdp.on("Network.responseReceived", (params: any) => {
-        const ct = params.response.headers["content-type"] || params.response.headers["Content-Type"] || "";
-        const matching = captured.find(
-          (c) => c.url === params.response.url && !c.responseHeaders
-        );
-        if (matching) {
-          matching.responseHeaders = params.response.headers;
-          matching.status = params.response.status;
-          matching.contentType = ct;
-          if (ct.includes("json")) {
-            matching.isApiCall = true;
+          if (isApi) {
+            let responseBody: string | undefined;
+            if (status >= 200 && status < 300 && contentType.toLowerCase().includes("json")) {
+              try {
+                responseBody = await response.text();
+              } catch {
+                // Response text might not be available for some responses
+              }
+            }
+
+            captured.push({
+              url: reqUrl,
+              method,
+              requestHeaders: reqHeaders,
+              postData,
+              responseHeaders,
+              responseBody,
+              status,
+              contentType,
+              isApiCall: true,
+            });
           }
+        } catch (err) {
+          // Ignore event handling errors
         }
       });
 
@@ -179,9 +186,6 @@ export class NetworkSniffer {
     } catch (err: any) {
       logger.warn({ url, error: err.message }, "[Layer 1] Navigation error");
     } finally {
-      if (cdp) {
-        try { await cdp.detach(); } catch {}
-      }
       if (page) {
         try { await page.close(); } catch {}
       }

@@ -313,7 +313,7 @@ Output: [
     const mainEntities = query.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b/g) || [];
 
     for (const aspect of aspects) {
-      if (aspect.pattern.test(query)) {
+      if (aspect.pattern.test(query.toLowerCase())) {
         subQueries.push({
           query: `${aspect.prefix} ${query}`,
           rationale: `Investigate ${aspect.type} aspect of the query`,
@@ -351,40 +351,49 @@ Output: [
   }> {
     logger.info({ query: subQuery.query }, "[Validity] Verifying sub-query");
 
-    // In a full implementation, this would:
-    // 1. Hit multiple sources (APIs, scrapers) for the same query
-    // 2. Extract claims from each source
-    // 3. Compare claims across sources
-    // 4. Only keep claims that appear in 2+ independent sources
-    //
-    // For now, this is a framework that processes findings
-    // from the other layers and applies verification logic.
-
-    const verified: VerifiedClaim[] = [];
-    const rejected: VerifiedClaim[] = [];
-    const contradictions: VerificationReport["contradictions"] = [];
     const sources = new Set<string>();
 
-    // The actual multi-source collection happens in the orchestrator.
-    // This engine processes the collected data for verification.
+    try {
+      const { getOrchestrator } = await import("./orchestrator.js");
+      const orchestrator = getOrchestrator();
+      const domainsVisited = new Set<string>();
 
-    return {
-      verified,
-      rejected,
-      contradictions,
-      sources: [...sources],
-    };
+      // Execute query through standard orchestrator pipeline layers (0, 1, 2)
+      const step = await orchestrator.researchSingleQuery(subQuery.query, true, domainsVisited);
+
+      // Collect sources from domains and findings
+      domainsVisited.forEach(d => sources.add(`https://${d}`));
+      step.findings.forEach(f => f.sourceUrls.forEach(url => sources.add(url)));
+
+      // Perform cross-source verification on findings
+      const { verified, rejected, contradictions } = await this.verifyClaims(step.findings);
+
+      return {
+        verified,
+        rejected,
+        contradictions,
+        sources: [...sources],
+      };
+    } catch (err: any) {
+      logger.error({ query: subQuery.query, error: err.message }, "[Validity] Sub-query verification failed");
+      return {
+        verified: [],
+        rejected: [],
+        contradictions: [],
+        sources: [],
+      };
+    }
   }
 
   /**
    * Phase 3: Verify a group of claims across multiple sources.
    * This is the core verification logic.
    */
-  verifyClaims(findings: Finding[]): {
+  async verifyClaims(findings: Finding[]): Promise<{
     verified: VerifiedClaim[];
     rejected: VerifiedClaim[];
     contradictions: VerificationReport["contradictions"];
-  } {
+  }> {
     const verified: VerifiedClaim[] = [];
     const rejected: VerifiedClaim[] = [];
     const contradictions: VerificationReport["contradictions"] = [];
@@ -410,7 +419,7 @@ Output: [
       const groupContradictions = this.detectGroupContradictions(group);
       if (groupContradictions.length > 0) {
         // Has contradictions — investigate further
-        const resolved = this.resolveContradictions(group, groupContradictions);
+        const resolved = await this.resolveContradictions(group, groupContradictions);
         contradictions.push(...resolved.contradictions);
       }
 
@@ -552,24 +561,76 @@ Output: [
   /**
    * Resolve contradictions within a group.
    */
-  private resolveContradictions(
+  private async resolveContradictions(
     group: Finding[],
     contradictions: Array<{ a: string; b: string }>
-  ): {
+  ): Promise<{
     contradictions: VerificationReport["contradictions"];
-  } {
+  }> {
     const resolved: VerificationReport["contradictions"] = [];
 
     for (const c of contradictions) {
+      const sourcesA = group.find(f => f.claim === c.a)?.sourceUrls || [];
+      const sourcesB = group.find(f => f.claim === c.b)?.sourceUrls || [];
+
+      let resolution = "Contradictory data — requires manual verification";
+
+      if (config.llm.apiKey) {
+        try {
+          resolution = await this.llmResolveContradiction(c.a, c.b, sourcesA, sourcesB);
+        } catch (err: any) {
+          logger.warn({ error: err.message }, "[Validity] LLM contradiction resolution failed");
+        }
+      }
+
       resolved.push({
         claim: c.a.substring(0, 100),
-        sourcesA: group.find(f => f.claim === c.a)?.sourceUrls || [],
-        sourcesB: group.find(f => f.claim === c.b)?.sourceUrls || [],
-        resolution: "Contradictory data — requires manual verification",
+        sourcesA,
+        sourcesB,
+        resolution,
       });
     }
 
     return { contradictions: resolved };
+  }
+
+  private async llmResolveContradiction(
+    claimA: string,
+    claimB: string,
+    sourcesA: string[],
+    sourcesB: string[]
+  ): Promise<string> {
+    const systemPrompt = `You are a research data validator. Analyze a contradiction between two findings and resolve it if possible.
+Choose one of these outcomes:
+1. Resolve in favor of one claim (explain why, e.g. more authoritative source, more recent information).
+2. Clarify that they are complementary (e.g. different contexts, different timeframes).
+3. State that the contradiction is unresolved and explain why.
+
+Return a concise resolution (maximum 2 sentences).`;
+
+    const response = await fetch(`${config.llm.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${config.llm.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: config.llm.model,
+        messages: [
+          { role: "system", content: systemPrompt },
+          {
+            role: "user",
+            content: `Finding A: "${claimA}"\nSources A: ${sourcesA.join(", ")}\n\nFinding B: "${claimB}"\nSources B: ${sourcesB.join(", ")}\n\nResolve this contradiction.`,
+          },
+        ],
+        temperature: 0.3,
+        max_tokens: 150,
+      }),
+    });
+
+    if (!response.ok) throw new Error(`LLM API error: ${response.status}`);
+    const data = await response.json() as any;
+    return data.choices?.[0]?.message?.content?.trim() || "Contradiction unresolved";
   }
 
   /**

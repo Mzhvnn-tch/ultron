@@ -1,0 +1,1193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Deep Research Agent — Dashboard</title>
+  
+  <!-- Premium Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  
+  <!-- Marked for Markdown Rendering -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    :root {
+      --bg-darkest: #020617;
+      --bg-dark: #0f172a;
+      --bg-card: #1e293b;
+      --border-color: rgba(255, 255, 255, 0.08);
+      --primary: #6366f1;
+      --primary-gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+      --emerald: #10b981;
+      --amber: #f59e0b;
+      --rose: #f43f5e;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Outfit', sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-darkest);
+      color: var(--text-main);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Scrollbar Styling */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: var(--bg-darkest);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+
+    /* Layout */
+    .app-container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    /* Glassmorphic Navbar */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(15, 23, 42, 0.6);
+      backdrop-filter: blur(12px);
+      padding: 16px 24px;
+      border-radius: 16px;
+      border: 1px solid var(--border-color);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-logo {
+      background: var(--primary-gradient);
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 20px;
+      box-shadow: 0 0 15px rgba(99, 102, 241, 0.4);
+    }
+
+    .brand-title {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+
+    .brand-subtitle {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .server-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.03);
+      padding: 6px 12px;
+      border-radius: 30px;
+      border: 1px solid var(--border-color);
+      font-size: 13px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: var(--text-muted);
+    }
+
+    .status-dot.online {
+      background-color: var(--emerald);
+      box-shadow: 0 0 8px var(--emerald);
+      animation: pulse 1.5s infinite;
+    }
+
+    /* Bento Grid */
+    .bento-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 20px;
+    }
+
+    @media (min-width: 1024px) {
+      .bento-grid {
+        grid-template-columns: 350px 1fr;
+        align-items: start;
+      }
+    }
+
+    /* Card Component */
+    .card {
+      background: rgba(30, 41, 59, 0.4);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .card-title {
+      font-size: 18px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Form Controls */
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    label {
+      font-size: 13px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    input, select, textarea {
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 12px 16px;
+      color: var(--text-main);
+      font-size: 14px;
+      outline: none;
+      transition: all 0.2s ease;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+    }
+
+    /* Mode Selection Tabs */
+    .tabs {
+      display: flex;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 4px;
+    }
+
+    .tab-btn {
+      flex: 1;
+      padding: 10px;
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      border-radius: 8px;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .tab-btn.active {
+      background: var(--primary);
+      color: var(--text-main);
+    }
+
+    /* Buttons */
+    .btn {
+      background: var(--primary-gradient);
+      color: var(--text-main);
+      border: none;
+      border-radius: 10px;
+      padding: 14px;
+      font-weight: 600;
+      font-size: 15px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
+      transition: all 0.2s ease;
+    }
+
+    .btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 16px rgba(99, 102, 241, 0.4);
+    }
+
+    .btn:active {
+      transform: translateY(1px);
+    }
+
+    .btn:disabled {
+      background: #334155;
+      color: #64748b;
+      box-shadow: none;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* Layer Progress Flowchart */
+    .pipeline-visualizer {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .visual-node {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      background: rgba(15, 23, 42, 0.5);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      font-size: 13px;
+      transition: all 0.3s ease;
+    }
+
+    .visual-node.active {
+      border-color: var(--primary);
+      background: rgba(99, 102, 241, 0.1);
+      box-shadow: 0 0 10px rgba(99, 102, 241, 0.1);
+    }
+
+    .visual-node.success {
+      border-color: var(--emerald);
+      background: rgba(16, 185, 129, 0.1);
+    }
+
+    .node-icon {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: #334155;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-muted);
+    }
+
+    .visual-node.active .node-icon {
+      background: var(--primary);
+      color: var(--text-main);
+      animation: pulse 1.5s infinite;
+    }
+
+    .visual-node.success .node-icon {
+      background: var(--emerald);
+      color: var(--text-main);
+    }
+
+    /* Output Panels */
+    .output-container {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .tab-content {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    /* Markdown styling */
+    .md-render {
+      font-size: 15px;
+      line-height: 1.6;
+      color: #cbd5e1;
+    }
+
+    .md-render h1, .md-render h2, .md-render h3 {
+      color: var(--text-main);
+      margin-top: 16px;
+      margin-bottom: 8px;
+      font-weight: 600;
+    }
+
+    .md-render h1 { font-size: 20px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px; }
+    .md-render h2 { font-size: 16px; }
+    .md-render p { margin-bottom: 12px; }
+    .md-render ul, .md-render ol { margin-left: 20px; margin-bottom: 12px; }
+    .md-render li { margin-bottom: 4px; }
+
+    /* Bento Results Grid */
+    .results-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 20px;
+    }
+
+    @media (min-width: 768px) {
+      .results-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    .results-grid.full {
+      grid-template-columns: 1fr;
+    }
+
+    /* Endpoint Card UI */
+    .endpoint-card {
+      background: rgba(15, 23, 42, 0.4);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      transition: all 0.2s ease;
+    }
+
+    .endpoint-card:hover {
+      border-color: #334155;
+    }
+
+    .ep-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .badge {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 8px;
+      border-radius: 6px;
+      text-transform: uppercase;
+    }
+
+    .badge.get { background: rgba(16, 185, 129, 0.15); color: var(--emerald); }
+    .badge.post { background: rgba(99, 102, 241, 0.15); color: var(--primary); }
+    .badge.delete { background: rgba(244, 63, 94, 0.15); color: var(--rose); }
+    .badge.put, .badge.patch { background: rgba(245, 158, 11, 0.15); color: var(--amber); }
+
+    .ep-path {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: var(--text-main);
+      overflow-wrap: break-word;
+      word-break: break-all;
+    }
+
+    .ep-meta {
+      font-size: 12px;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .curl-box {
+      background: #020617;
+      border-radius: 8px;
+      padding: 10px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      overflow-x: auto;
+      color: #94a3b8;
+      position: relative;
+    }
+
+    .copy-btn {
+      position: absolute;
+      right: 8px;
+      top: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      padding: 4px 6px;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 10px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .copy-btn:hover {
+      background: rgba(255, 255, 255, 0.15);
+      color: var(--text-main);
+    }
+
+    /* Warning/Alert styling */
+    .alert-card {
+      background: rgba(245, 158, 11, 0.08);
+      border: 1px solid rgba(245, 158, 11, 0.2);
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      gap: 12px;
+    }
+
+    .alert-icon {
+      color: var(--amber);
+      flex-shrink: 0;
+    }
+
+    .alert-title {
+      font-weight: 600;
+      color: var(--text-main);
+      font-size: 14px;
+      margin-bottom: 4px;
+    }
+
+    .alert-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    /* Progress States */
+    .progress-bar-container {
+      width: 100%;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 10px;
+      overflow: hidden;
+      display: none;
+    }
+
+    .progress-bar {
+      height: 100%;
+      background: var(--primary-gradient);
+      width: 0%;
+      transition: width 0.4s ease;
+    }
+
+    .terminal-box {
+      background: #020617;
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 16px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: #a7f3d0;
+      height: 150px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .terminal-line {
+      display: flex;
+      gap: 8px;
+    }
+
+    .term-prompt {
+      color: var(--primary);
+    }
+
+    /* Animations */
+    @keyframes pulse {
+      0%, 100% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4);
+      }
+      50% {
+        transform: scale(1.05);
+        box-shadow: 0 0 10px 4px rgba(99, 102, 241, 0.2);
+      }
+    }
+
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 60px 20px;
+      text-align: center;
+      color: var(--text-muted);
+      gap: 12px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="app-container">
+    
+    <!-- Header -->
+    <header>
+      <div class="brand">
+        <div class="brand-logo">🧠</div>
+        <div>
+          <h1 class="brand-title">Deep Research Agent</h1>
+          <p class="brand-subtitle">Autonomous Web API Discovery & Grounded Citation Engine</p>
+        </div>
+      </div>
+      <div class="server-status">
+        <div id="statusDot" class="status-dot"></div>
+        <span id="statusText">Checking server...</span>
+      </div>
+    </header>
+
+    <!-- Bento Core Grid -->
+    <div class="bento-grid">
+      
+      <!-- Left Panel: Control Station -->
+      <div class="card">
+        <h2 class="card-title"><i data-lucide="sliders"></i> Control Center</h2>
+        
+        <!-- Tab selector -->
+        <div class="tabs">
+          <button id="tabResearch" class="tab-btn active" onclick="switchMode('research')">
+            <i data-lucide="search"></i> Research
+          </button>
+          <button id="tabDeep" class="tab-btn" onclick="switchMode('deep')">
+            <i data-lucide="binary"></i> Layer 4 (JS)
+          </button>
+          <button id="tabVerify" class="tab-btn" onclick="switchMode('verify')">
+            <i data-lucide="shield-check"></i> Verify
+          </button>
+        </div>
+
+        <form id="controlForm" onsubmit="event.preventDefault(); triggerJob();">
+          
+          <!-- Input field dynamic label -->
+          <div class="form-group">
+            <label id="inputLabel" for="mainInput">Search Query</label>
+            <input type="text" id="mainInput" placeholder="Ex: ETH current price and staking yield" required>
+          </div>
+
+          <!-- Advanced Settings -->
+          <div class="form-group" id="depthGroup">
+            <label for="maxDepth">Search Depth</label>
+            <select id="maxDepth">
+              <option value="1">1 (Fastest / Heuristic)</option>
+              <option value="2">2 (Balanced)</option>
+              <option value="3" selected>3 (Deep - browser sniff)</option>
+            </select>
+          </div>
+
+          <div class="form-group" id="sourcesGroup">
+            <label for="maxSources">Max Sources</label>
+            <select id="maxSources">
+              <option value="3">3 Sources</option>
+              <option value="5" selected>5 Sources</option>
+              <option value="10">10 Sources</option>
+            </select>
+          </div>
+
+          <button type="submit" id="submitBtn" class="btn">
+            <i data-lucide="play"></i> <span id="btnText">Start Research</span>
+          </button>
+        </form>
+
+        <!-- Pipeline Map -->
+        <div class="form-group">
+          <label>Agent Pipeline Flow</label>
+          <div class="pipeline-visualizer">
+            <div id="nodeRouter" class="visual-node">
+              <div class="node-icon">R</div>
+              <div>Knowledge API Router</div>
+            </div>
+            <div id="nodeL0" class="visual-node">
+              <div class="node-icon">0</div>
+              <div>Layer 0: API Spec Discovery</div>
+            </div>
+            <div id="nodeL1" class="visual-node">
+              <div class="node-icon">1</div>
+              <div>Layer 1: Network Sniffing (CDP)</div>
+            </div>
+            <div id="nodeL2" class="visual-node">
+              <div class="node-icon">2</div>
+              <div>Layer 2: Stealth Scraper</div>
+            </div>
+            <div id="nodeL3" class="visual-node">
+              <div class="node-icon">3</div>
+              <div>Layer 3: Contradiction & Grounding</div>
+            </div>
+            <div id="nodeL4" class="visual-node" style="display:none;">
+              <div class="node-icon">4</div>
+              <div>Layer 4: JS Bundle AST Extract</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Right Panel: Dynamic Outputs -->
+      <div class="output-container">
+        
+        <!-- Live Loading Log / Terminal -->
+        <div id="loadingPanel" class="card" style="display:none;">
+          <h2 class="card-title"><i data-lucide="terminal"></i> Agent Logs</h2>
+          <div class="progress-bar-container" id="progContainer">
+            <div class="progress-bar" id="progressBar"></div>
+          </div>
+          <div class="terminal-box" id="terminalLog"></div>
+        </div>
+
+        <!-- Main Display Panel -->
+        <div id="resultPanel" class="card">
+          
+          <!-- Empty State -->
+          <div id="emptyState" class="empty-state">
+            <i data-lucide="sparkles" style="width: 48px; height: 48px; color: var(--primary);"></i>
+            <h3>Enter a search query or domain to initialize deep research</h3>
+            <p>Use the control panel on the left to trigger autonomous layers</p>
+          </div>
+
+          <!-- Main Results Display -->
+          <div id="displayContent" style="display: none;">
+            
+            <div class="tab-content" id="researchResult">
+              <!-- Summary Section -->
+              <div>
+                <h2 style="font-weight: 600; margin-bottom: 12px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; display:flex; align-items:center; gap:8px;">
+                  <i data-lucide="book-open"></i> Synthesized Research Report
+                </h2>
+                <div id="summaryReport" class="md-render"></div>
+              </div>
+
+              <!-- Extra Findings / Bento details -->
+              <div class="results-grid" id="findingsGrid">
+                <!-- Discovered APIs Card -->
+                <div class="card" style="background: rgba(15, 23, 42, 0.3);">
+                  <h3 class="card-title"><i data-lucide="server" style="color: var(--primary);"></i> Discovered APIs</h3>
+                  <div style="display:flex; flex-direction:column; gap:10px;" id="discoveredApisList"></div>
+                </div>
+                
+                <!-- Citations Card -->
+                <div class="card" style="background: rgba(15, 23, 42, 0.3);">
+                  <h3 class="card-title"><i data-lucide="link" style="color: var(--emerald);"></i> Source Citations</h3>
+                  <div style="display:flex; flex-direction:column; gap:10px;" id="citationsList"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Deep JS Bundle Parser specific UI -->
+            <div class="tab-content" id="deepResult" style="display: none;">
+              <h2 style="font-weight: 600; margin-bottom: 12px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; display:flex; align-items:center; gap:8px;">
+                <i data-lucide="binary"></i> Extracted API Contracts & Credentials
+              </h2>
+
+              <div id="credentialsAlert"></div>
+
+              <div class="results-grid" id="deepDetailsGrid">
+                <!-- Raw Endpoints -->
+                <div class="card" style="background: rgba(15, 23, 42, 0.3); grid-column: span 1;">
+                  <h3 class="card-title"><i data-lucide="list" style="color: var(--primary);"></i> Discovered Endpoints</h3>
+                  <div style="display:flex; flex-direction:column; gap:12px; max-height:500px; overflow-y:auto; padding-right:6px;" id="deepEndpointsList"></div>
+                </div>
+
+                <!-- Generated Curl commands -->
+                <div class="card" style="background: rgba(15, 23, 42, 0.3); grid-column: span 1;">
+                  <h3 class="card-title"><i data-lucide="code" style="color: var(--emerald);"></i> Runnable cURL Commands</h3>
+                  <div style="display:flex; flex-direction:column; gap:12px; max-height:500px; overflow-y:auto; padding-right:6px;" id="deepCurlsList"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Verification / Contradiction Tab Content -->
+            <div class="tab-content" id="verifyResult" style="display: none;">
+              <h2 style="font-weight: 600; margin-bottom: 12px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; display:flex; align-items:center; gap:8px;">
+                <i data-lucide="shield-alert"></i> Fact Verification & Contradiction Report
+              </h2>
+
+              <div id="contradictionsLog"></div>
+
+              <div class="results-grid full">
+                <div class="card" style="background: rgba(15, 23, 42, 0.3);">
+                  <h3 class="card-title"><i data-lucide="check-circle-2" style="color: var(--emerald);"></i> Verified Facts vs Rejected Claims</h3>
+                  <div style="display:flex; flex-direction:column; gap:12px;" id="verifiedClaimsList"></div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+
+  <script>
+    let currentMode = 'research';
+    const API_BASE = 'http://localhost:3001';
+
+    // Initialize icons
+    lucide.createIcons();
+
+    // Check backend health
+    async function checkHealth() {
+      const dot = document.getElementById('statusDot');
+      const text = document.getElementById('statusText');
+      try {
+        const res = await fetch(`${API_BASE}/health`);
+        const data = await res.json();
+        if (data.status === 'ok') {
+          dot.className = 'status-dot online';
+          text.innerText = `Online • ${data.cache.totalEndpoints} Cached APIs`;
+        }
+      } catch {
+        dot.className = 'status-dot';
+        text.innerText = 'Server offline (Start it: npm run dev)';
+        text.style.color = 'var(--rose)';
+      }
+    }
+
+    setInterval(checkHealth, 5000);
+    checkHealth();
+
+    // Switch between operations
+    function switchMode(mode) {
+      currentMode = mode;
+      
+      // Update buttons style
+      document.getElementById('tabResearch').className = `tab-btn ${mode === 'research' ? 'active' : ''}`;
+      document.getElementById('tabDeep').className = `tab-btn ${mode === 'deep' ? 'active' : ''}`;
+      document.getElementById('tabVerify').className = `tab-btn ${mode === 'verify' ? 'active' : ''}`;
+
+      // Update Form Labels
+      const mainInput = document.getElementById('mainInput');
+      const btnText = document.getElementById('btnText');
+      const inputLabel = document.getElementById('inputLabel');
+      
+      const depthGroup = document.getElementById('depthGroup');
+      const sourcesGroup = document.getElementById('sourcesGroup');
+
+      // Update Nodes visualization display
+      const nodeL4 = document.getElementById('nodeL4');
+      const nodeL1 = document.getElementById('nodeL1');
+      const nodeL2 = document.getElementById('nodeL2');
+
+      if (mode === 'research') {
+        inputLabel.innerText = 'Search Query';
+        mainInput.placeholder = 'Ex: ETH current price and staking yield';
+        btnText.innerText = 'Start Research';
+        depthGroup.style.display = 'flex';
+        sourcesGroup.style.display = 'flex';
+        nodeL4.style.display = 'none';
+        nodeL1.style.display = 'flex';
+        nodeL2.style.display = 'flex';
+      } else if (mode === 'deep') {
+        inputLabel.innerText = 'Domain URL';
+        mainInput.placeholder = 'Ex: jsonplaceholder.typicode.com';
+        btnText.innerText = 'Extract APIs';
+        depthGroup.style.display = 'none';
+        sourcesGroup.style.display = 'none';
+        nodeL4.style.display = 'flex';
+        nodeL1.style.display = 'none';
+        nodeL2.style.display = 'none';
+      } else if (mode === 'verify') {
+        inputLabel.innerText = 'Fact Query';
+        mainInput.placeholder = 'Ex: is ethereum fully proof of stake?';
+        btnText.innerText = 'Verify Claim';
+        depthGroup.style.display = 'none';
+        sourcesGroup.style.display = 'none';
+        nodeL4.style.display = 'none';
+        nodeL1.style.display = 'flex';
+        nodeL2.style.display = 'flex';
+      }
+
+      resetPipelineVisuals();
+    }
+
+    function resetPipelineVisuals() {
+      const nodes = ['nodeRouter', 'nodeL0', 'nodeL1', 'nodeL2', 'nodeL3', 'nodeL4'];
+      nodes.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.className = 'visual-node';
+      });
+    }
+
+    function logTerminal(message, type = 'info') {
+      const terminal = document.getElementById('terminalLog');
+      const line = document.createElement('div');
+      line.className = 'terminal-line';
+      
+      const prompt = document.createElement('span');
+      prompt.className = 'term-prompt';
+      prompt.innerText = '❯';
+      
+      const content = document.createElement('span');
+      content.innerText = `[${new Date().toLocaleTimeString()}] [${type.toUpperCase()}] ${message}`;
+      if (type === 'error') content.style.color = 'var(--rose)';
+      if (type === 'success') content.style.color = 'var(--emerald)';
+      if (type === 'warn') content.style.color = 'var(--amber)';
+
+      line.appendChild(prompt);
+      line.appendChild(content);
+      terminal.appendChild(line);
+      terminal.scrollTop = terminal.scrollHeight;
+    }
+
+    // Copy to clipboard helper
+    function copyText(btn, text) {
+      navigator.clipboard.writeText(text);
+      const original = btn.innerHTML;
+      btn.innerHTML = `<i data-lucide="check" style="width:12px;height:12px;"></i> Copied`;
+      btn.style.color = 'var(--emerald)';
+      lucide.createIcons();
+      setTimeout(() => {
+        btn.innerHTML = original;
+        btn.style.color = 'var(--text-muted)';
+        lucide.createIcons();
+      }, 1500);
+    }
+
+    // Trigger research job
+    async function triggerJob() {
+      const mainInput = document.getElementById('mainInput').value.trim();
+      if (!mainInput) return;
+
+      const submitBtn = document.getElementById('submitBtn');
+      const loadingPanel = document.getElementById('loadingPanel');
+      const resultPanel = document.getElementById('resultPanel');
+      const emptyState = document.getElementById('emptyState');
+      const displayContent = document.getElementById('displayContent');
+      const terminal = document.getElementById('terminalLog');
+
+      // UI state
+      submitBtn.disabled = true;
+      emptyState.style.display = 'none';
+      displayContent.style.display = 'none';
+      loadingPanel.style.display = 'flex';
+      terminal.innerHTML = '';
+      
+      document.getElementById('progContainer').style.display = 'block';
+      const progressBar = document.getElementById('progressBar');
+      progressBar.style.width = '10%';
+
+      resetPipelineVisuals();
+      logTerminal(`Starting ${currentMode.toUpperCase()} task for: "${mainInput}"`);
+
+      // Mock pipeline visual animations based on mode
+      const stages = [];
+      if (currentMode === 'research' || currentMode === 'verify') {
+        stages.push({ el: 'nodeRouter', time: 500, pct: 25, log: 'Hitting Knowledge Router...' });
+        stages.push({ el: 'nodeL0', time: 2000, pct: 45, log: 'Probing API Spec catalogs & OpenAPI specs...' });
+        stages.push({ el: 'nodeL1', time: 5000, pct: 70, log: 'Spawning headless browser. Sniffing network requests...' });
+        stages.push({ el: 'nodeL2', time: 8000, pct: 85, log: 'Bypassing frontend blocks via stealth parser...' });
+        stages.push({ el: 'nodeL3', time: 11000, pct: 95, log: 'Performing citation grounding & resolving contradictions...' });
+      } else {
+        // Deep JS mode
+        stages.push({ el: 'nodeRouter', time: 500, pct: 30, log: 'Analyzing URL domain...' });
+        stages.push({ el: 'nodeL4', time: 3000, pct: 75, log: 'Downloading minified Javascript bundles...' });
+        stages.push({ el: 'nodeL3', time: 7000, pct: 95, log: 'Parsing code tokens, extracting keys & HTTP contracts...' });
+      }
+
+      const stageIntervals = [];
+      stages.forEach(stage => {
+        const timeout = setTimeout(() => {
+          // Set previous node success
+          stages.forEach(s => {
+            const el = document.getElementById(s.el);
+            if (s.time < stage.time) el.className = 'visual-node success';
+          });
+          const currentEl = document.getElementById(stage.el);
+          currentEl.className = 'visual-node active';
+          logTerminal(stage.log);
+          progressBar.style.width = `${stage.pct}%`;
+        }, stage.time);
+        stageIntervals.push(timeout);
+      });
+
+      // Assemble Request
+      let url = `${API_BASE}/research`;
+      let payload = {};
+
+      if (currentMode === 'research') {
+        payload = {
+          query: mainInput,
+          maxDepth: parseInt(document.getElementById('maxDepth').value),
+          maxSources: parseInt(document.getElementById('maxSources').value),
+          preferApi: true
+        };
+      } else if (currentMode === 'deep') {
+        url = `${API_BASE}/research/deep`;
+        // Clean URL to domain
+        let domain = mainInput.replace(/https?:\/\//, '').split('/')[0];
+        payload = { domain };
+      } else if (currentMode === 'verify') {
+        url = `${API_BASE}/research/verify`;
+        payload = { query: mainInput };
+      }
+
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        
+        // Cancel loading timeouts
+        stageIntervals.forEach(t => clearTimeout(t));
+
+        // Light all visual nodes success
+        stages.forEach(s => {
+          document.getElementById(s.el).className = 'visual-node success';
+        });
+
+        progressBar.style.width = '100%';
+        logTerminal('Research complete! Processing response data...', 'success');
+        
+        setTimeout(() => {
+          document.getElementById('progContainer').style.display = 'none';
+        }, 1000);
+
+        renderResults(data);
+
+      } catch (err) {
+        stageIntervals.forEach(t => clearTimeout(t));
+        logTerminal(`Task failed: ${err.message}`, 'error');
+        resetPipelineVisuals();
+      } finally {
+        submitBtn.disabled = false;
+      }
+    }
+
+    function renderResults(data) {
+      // Hide tabs
+      document.getElementById('researchResult').style.display = 'none';
+      document.getElementById('deepResult').style.display = 'none';
+      document.getElementById('verifyResult').style.display = 'none';
+      
+      document.getElementById('displayContent').style.display = 'block';
+
+      if (currentMode === 'research') {
+        document.getElementById('researchResult').style.display = 'flex';
+        
+        // Render Summary (Markdown)
+        const summaryHtml = marked.parse(data.summary || 'No summary compiled.');
+        document.getElementById('summaryReport').innerHTML = summaryHtml;
+
+        // Render Discovered APIs
+        const apisList = document.getElementById('discoveredApisList');
+        apisList.innerHTML = '';
+        if (data.discoveredApiEndpoints && data.discoveredApiEndpoints.length > 0) {
+          data.discoveredApiEndpoints.slice(0, 10).forEach(ep => {
+            const card = document.createElement('div');
+            card.className = 'endpoint-card';
+            card.innerHTML = `
+              <div class="ep-header">
+                <span class="badge ${ep.method.toLowerCase()}">${ep.method}</span>
+                <span class="badge" style="background:rgba(255,255,255,0.05); font-size:10px;">conf ${(ep.confidence * 100).toFixed(0)}%</span>
+              </div>
+              <div class="ep-path">${ep.url}</div>
+              <div class="ep-meta">${ep.description || 'No description'}</div>
+            `;
+            apisList.appendChild(card);
+          });
+        } else {
+          apisList.innerHTML = '<p style="color:var(--text-muted); font-size:13px;">No APIs discovered during this run.</p>';
+        }
+
+        // Render Citations
+        const citationsList = document.getElementById('citationsList');
+        citationsList.innerHTML = '';
+        if (data.citations && data.citations.length > 0) {
+          data.citations.forEach(c => {
+            const card = document.createElement('div');
+            card.className = 'endpoint-card';
+            card.innerHTML = `
+              <div style="font-weight:600; font-size:13px; color:var(--primary);">${c.title || 'Source Citation'}</div>
+              <div style="font-size:12px; word-break:break-all;"><a href="${c.url}" target="_blank" style="color:#60a5fa; text-decoration:none;">${c.url}</a></div>
+              <div style="font-size:11px; color:var(--text-muted); padding-top:6px; font-style:italic;">"${c.snippet.substring(0, 200)}..."</div>
+            `;
+            citationsList.appendChild(card);
+          });
+        } else {
+          citationsList.innerHTML = '<p style="color:var(--text-muted); font-size:13px;">No source citations recorded.</p>';
+        }
+
+      } else if (currentMode === 'deep') {
+        document.getElementById('deepResult').style.display = 'flex';
+
+        // Credentials Alert
+        const credAlert = document.getElementById('credentialsAlert');
+        credAlert.innerHTML = '';
+        if (data.credentials && data.credentials.length > 0) {
+          const cAlert = document.createElement('div');
+          cAlert.className = 'alert-card';
+          cAlert.innerHTML = `
+            <i data-lucide="shield-alert" class="alert-icon"></i>
+            <div>
+              <div class="alert-title">Exposed Credentials Detected in JS bundles!</div>
+              <div class="alert-desc">${data.credentials.length} API keys / tokens extracted from minified sources. Check the credentials list.</div>
+            </div>
+          `;
+          credAlert.appendChild(cAlert);
+        }
+
+        // Endpoints List
+        const epList = document.getElementById('deepEndpointsList');
+        epList.innerHTML = '';
+        if (data.apiEndpoints && data.apiEndpoints.length > 0) {
+          data.apiEndpoints.forEach(ep => {
+            const card = document.createElement('div');
+            card.className = 'endpoint-card';
+            card.innerHTML = `
+              <div class="ep-header">
+                <span class="badge ${ep.method.toLowerCase()}">${ep.method}</span>
+                <span class="badge" style="background:rgba(255,255,255,0.05); font-size:10px;">conf ${(ep.confidence * 100).toFixed(0)}%</span>
+              </div>
+              <div class="ep-path">${ep.url}</div>
+              <div class="ep-meta">${ep.description || 'Raw API contract'}</div>
+              ${ep.headers && Object.keys(ep.headers).length > 0 ? `
+                <div style="font-size:11px; font-family:'JetBrains Mono', monospace; background:#020617; padding:6px; border-radius:6px; color:#a7f3d0;">
+                  Headers: ${JSON.stringify(ep.headers)}
+                </div>
+              ` : ''}
+            `;
+            epList.appendChild(card);
+          });
+        } else {
+          epList.innerHTML = '<p style="color:var(--text-muted); font-size:13px;">No JS endpoints discovered.</p>';
+        }
+
+        // Curl Commands
+        const curlsList = document.getElementById('deepCurlsList');
+        curlsList.innerHTML = '';
+        if (data.curlCommands && data.curlCommands.length > 0) {
+          data.curlCommands.forEach(c => {
+            const card = document.createElement('div');
+            card.className = 'endpoint-card';
+            
+            // Clean up backslashes if present
+            const safeCurl = c.replace(/\\/g, '');
+            
+            card.innerHTML = `
+              <div class="curl-box">
+                <button class="copy-btn" onclick="copyText(this, \`${safeCurl.replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`)"><i data-lucide="copy" style="width:10px;height:10px;"></i> Copy</button>
+                <code>${c}</code>
+              </div>
+            `;
+            curlsList.appendChild(card);
+          });
+        } else {
+          curlsList.innerHTML = '<p style="color:var(--text-muted); font-size:13px;">No cURL commands generated.</p>';
+        }
+
+      } else if (currentMode === 'verify') {
+        document.getElementById('verifyResult').style.display = 'flex';
+
+        // Render Contradictions Log
+        const cLog = document.getElementById('contradictionsLog');
+        cLog.innerHTML = '';
+        const report = data.report;
+        if (report.contradictions && report.contradictions.length > 0) {
+          report.contradictions.forEach(c => {
+            const card = document.createElement('div');
+            card.className = 'alert-card';
+            card.style.background = 'rgba(244, 63, 94, 0.08)';
+            card.style.borderColor = 'rgba(244, 63, 94, 0.2)';
+            
+            card.innerHTML = `
+              <i data-lucide="shield-alert" class="alert-icon" style="color:var(--rose);"></i>
+              <div>
+                <div class="alert-title" style="color:var(--rose);">Contradiction Found: "${c.claim}"</div>
+                <div class="alert-desc" style="margin-bottom:8px;">Source disagreement detected during query.</div>
+                <div style="font-size:12px; color:var(--text-main); font-weight:500;">Resolution:</div>
+                <div style="font-size:12px; color:var(--text-muted); font-style:italic;">"${c.resolution}"</div>
+              </div>
+            `;
+            cLog.appendChild(card);
+          });
+        } else {
+          cLog.innerHTML = `
+            <div class="alert-card" style="background:rgba(16,185,129,0.08); border-color:rgba(16,185,129,0.2);">
+              <i data-lucide="check-check" class="alert-icon" style="color:var(--emerald);"></i>
+              <div>
+                <div class="alert-title" style="color:var(--emerald);">Zero Contradictions Found</div>
+                <div class="alert-desc">All evaluated sources show perfect alignment across key facts.</div>
+              </div>
+            </div>
+          `;
+        }
+
+        // Render Verified vs Rejected list
+        const claimsList = document.getElementById('verifiedClaimsList');
+        claimsList.innerHTML = '';
+        
+        if (report.verifiedClaims && report.verifiedClaims.length > 0) {
+          report.verifiedClaims.forEach(vc => {
+            const card = document.createElement('div');
+            card.className = 'endpoint-card';
+            card.style.borderLeft = '4px solid var(--emerald)';
+            card.innerHTML = `
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span class="badge" style="background:rgba(16, 185, 129, 0.15); color:var(--emerald); font-size:10px;">Verified (conf ${(vc.confidence * 100).toFixed(0)}%)</span>
+                <span style="font-size:11px; color:var(--text-muted);">Confirmed by ${vc.confirmationCount} sources</span>
+              </div>
+              <div style="font-size:14px; font-weight:500; padding:4px 0;">${vc.claim}</div>
+              <div style="font-size:11px; color:var(--text-muted); text-overflow:ellipsis; overflow:hidden; white-space:nowrap;">
+                Sources: ${vc.supportingSources.join(', ')}
+              </div>
+            `;
+            claimsList.appendChild(card);
+          });
+        }
+
+        if (report.rejectedClaims && report.rejectedClaims.length > 0) {
+          report.rejectedClaims.forEach(rc => {
+            const card = document.createElement('div');
+            card.className = 'endpoint-card';
+            card.style.borderLeft = '4px solid var(--rose)';
+            card.innerHTML = `
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span class="badge" style="background:rgba(244, 63, 94, 0.15); color:var(--rose); font-size:10px;">Rejected / Unverifiable (${(rc.confidence * 100).toFixed(0)}%)</span>
+              </div>
+              <div style="font-size:14px; color:#cbd5e1; font-weight:400; padding:4px 0;">${rc.claim}</div>
+            `;
+            claimsList.appendChild(card);
+          });
+        }
+      }
+
+      // Re-create icons dynamically
+      lucide.createIcons();
+    }
+  </script>
+</body>
+</html>

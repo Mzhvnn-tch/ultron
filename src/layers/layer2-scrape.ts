@@ -139,6 +139,22 @@ export class StealthScraper {
         .trim()
         .substring(0, 50_000); // Cap at 50KB
 
+      // Check if this is a CAPTCHA/bot detection page or error block page
+      const captchaKeywords = [
+        "unusual traffic", "captcha", "not a robot", "terms of service", "detected requests",
+        "challenge to confirm", "made by a human", "bots use", "automated requests",
+        "prevent automated", "completing the challenge", "if this persists, please",
+        "support email address", "anonymized error code"
+      ];
+      const isSearchEngine = url.includes("google.com") || url.includes("duckduckgo.com") || url.includes("bing.com");
+      if (
+        captchaKeywords.some(keyword => cleaned.toLowerCase().includes(keyword)) ||
+        (isSearchEngine && cleaned.length < 500)
+      ) {
+        logger.warn({ url, length: cleaned.length }, "[Layer 2] Scraped page appears to be a CAPTCHA or block page — rejecting");
+        throw new Error("Scraper blocked by CAPTCHA/bot detection");
+      }
+
       // Extract structured data if available
       const extractedData = await page.evaluate(`
         const data = {};

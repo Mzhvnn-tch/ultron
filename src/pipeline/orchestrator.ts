@@ -209,7 +209,7 @@ export class ResearchOrchestrator {
   /**
    * Research a single sub-query through all layers.
    */
-  private async researchSingleQuery(
+  public async researchSingleQuery(
     query: string,
     preferApi: boolean,
     domainsVisited: Set<string>
@@ -351,12 +351,9 @@ export class ResearchOrchestrator {
               throw new Error("Direct scrape insufficient");
             }
           } catch {
-            // Strategy B: Google search fallback
-            const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query + " site:" + domain)}`;
-            logger.info({ url: searchUrl }, "[Orchestrator] Falling back to Google search");
-
+            // Strategy B: Search fallback
             try {
-              const scrapedPage = await scraper.scrape(searchUrl);
+              const scrapedPage = await this.executeSearch(query, domain);
               step.scrapedData.push(scrapedPage);
 
               const claims = grounding.extractClaims(
@@ -365,10 +362,10 @@ export class ResearchOrchestrator {
                 scrapedPage.title
               );
               step.findings.push(...claims);
-            } catch (googleErr: any) {
+            } catch (searchErr: any) {
               logger.warn(
-                { error: googleErr.message },
-                "[Orchestrator] Google fallback also failed"
+                { error: searchErr.message },
+                "[Orchestrator] Search fallback also failed"
               );
             }
           }
@@ -401,12 +398,10 @@ export class ResearchOrchestrator {
           } catch {}
         }
 
-        // Only fall back to Google if direct scrape didn't work
+        // Only fall back to Search if direct scrape didn't work
         if (step.findings.length === 0) {
-          const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
-          logger.info({ url: searchUrl }, "[Orchestrator] No domains in query — Google search");
           try {
-            const scrapedPage = await scraper.scrape(searchUrl);
+            const scrapedPage = await this.executeSearch(query);
             step.scrapedData.push(scrapedPage);
             const claims = grounding.extractClaims(
               scrapedPage.content,
@@ -414,8 +409,37 @@ export class ResearchOrchestrator {
               scrapedPage.title
             );
             step.findings.push(...claims);
+
+            // DYNAMIC DEEP API DISCOVERY LOOP:
+            // Extract the official domain of the target entity from search results
+            const discoveredDomain = this.extractDomainFromSearch(scrapedPage);
+            if (discoveredDomain && !domainsVisited.has(discoveredDomain)) {
+              logger.info({ discoveredDomain }, "[Orchestrator] Dynamically discovered official domain from search results — triggering API sniffing loop");
+              domainsVisited.add(discoveredDomain);
+
+              // 1. Run API Discovery
+              const apiDiscovery = getApiDiscovery();
+              const apiEndpoints = await apiDiscovery.discover(discoveredDomain);
+              step.discoveredEndpoints.push(...apiEndpoints);
+
+              if (apiEndpoints.length > 0) {
+                const apiFindings = await this.queryApiEndpoints(query, apiEndpoints, discoveredDomain);
+                step.usedEndpoints.push(...apiEndpoints.filter(ep => ep.successCount > 0));
+                step.findings.push(...apiFindings);
+              }
+
+              // 2. Run Network Sniffing
+              const sniffer = getNetworkSniffer();
+              const sniffed = await sniffer.sniff(`https://${discoveredDomain}`);
+              step.sniffedEndpoints.push(...sniffed);
+
+              if (sniffed.length > 0) {
+                const sniffFindings = await this.queryApiEndpoints(query, sniffed, discoveredDomain);
+                step.findings.push(...sniffFindings);
+              }
+            }
           } catch (err: any) {
-            logger.warn({ error: err.message }, "[Orchestrator] Google search failed");
+            logger.warn({ error: err.message }, "[Orchestrator] Search fallback failed");
           }
         }
       }
@@ -612,6 +636,146 @@ export class ResearchOrchestrator {
     }
 
     return targets;
+  }
+
+  /**
+   * Execute search via Tavily API, DuckDuckGo HTML scraping, or Wikipedia API fallback.
+   */
+  private async executeSearch(query: string, domain?: string): Promise<ScrapedPage> {
+    const searchQuery = domain ? `${query} site:${domain}` : query;
+    const tavilyKey = process.env.TAVILY_API_KEY;
+
+    // 1. Try Tavily API if key is present
+    if (tavilyKey) {
+      logger.info({ searchQuery }, "[Search] Using Tavily Search API");
+      try {
+        const response = await this.http.post("https://api.tavily.com/search", {
+          api_key: tavilyKey,
+          query: searchQuery,
+          search_depth: "basic",
+        }, { timeout: 10000 });
+
+        if (response.status === 200 && response.data) {
+          const results = response.data.results || [];
+          const content = results.map((r: any) => `Title: ${r.title}\nURL: ${r.url}\nSnippet: ${r.content}`).join("\n\n");
+          return {
+            url: `tavily:${encodeURIComponent(searchQuery)}`,
+            title: `Tavily Search: ${searchQuery}`,
+            content,
+            htmlLength: content.length,
+            extractedData: { results },
+            fetchedAt: Date.now(),
+          };
+        }
+      } catch (err: any) {
+        logger.warn({ error: err.message }, "[Search] Tavily Search API failed, falling back");
+      }
+    }
+
+    // 2. Try DuckDuckGo HTML scrape (less aggressive than Google, but still has bot challenges)
+    try {
+      const scraper = getStealthScraper();
+      const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(searchQuery)}`;
+      logger.info({ url: searchUrl }, "[Search] Scraping DuckDuckGo search");
+      return await scraper.scrape(searchUrl);
+    } catch (err: any) {
+      logger.warn({ error: err.message }, "[Search] DuckDuckGo scraping failed (likely CAPTCHA block), trying Wikipedia API");
+    }
+
+    // 3. Try Wikipedia Search API (both id.wikipedia.org and en.wikipedia.org)
+    try {
+      logger.info({ searchQuery }, "[Search] Falling back to Wikipedia Search API (EN + ID)");
+      const results: any[] = [];
+      
+      const enUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&format=json&origin=*`;
+      const idUrl = `https://id.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&format=json&origin=*`;
+      
+      const [enResp, idResp] = await Promise.all([
+        this.http.get(enUrl, {
+          headers: { "User-Agent": "DeepResearchAgent/1.0 (contact@deepresearchagent.internal)" },
+          timeout: 6000
+        }).catch(() => null),
+        this.http.get(idUrl, {
+          headers: { "User-Agent": "DeepResearchAgent/1.0 (contact@deepresearchagent.internal)" },
+          timeout: 6000
+        }).catch(() => null),
+      ]);
+      
+      if (enResp?.status === 200 && enResp.data?.query?.search) {
+        results.push(...enResp.data.query.search.map((r: any) => ({ ...r, lang: "en" })));
+      }
+      if (idResp?.status === 200 && idResp.data?.query?.search) {
+        results.push(...idResp.data.query.search.map((r: any) => ({ ...r, lang: "id" })));
+      }
+      
+      if (results.length > 0) {
+        const content = results
+          .slice(0, 10)
+          .map((r: any) => `Title: ${r.title} (${r.lang.toUpperCase()})\nSnippet: ${r.snippet.replace(/<span class="searchmatch">/g, "").replace(/<\/span>/g, "")}`)
+          .join("\n\n");
+          
+        logger.info({ count: results.length }, "[Search] Wikipedia Search API success");
+        const topResult = results[0];
+        const wikiDomain = topResult.lang === "id" ? "id.wikipedia.org" : "en.wikipedia.org";
+        
+        return {
+          url: `https://${wikiDomain}/wiki/${encodeURIComponent(topResult.title)}`,
+          title: `Wikipedia Search: ${searchQuery}`,
+          content,
+          htmlLength: content.length,
+          extractedData: { results },
+          fetchedAt: Date.now(),
+        };
+      }
+    } catch (err: any) {
+      logger.error({ error: err.message }, "[Search] Wikipedia fallback also failed");
+    }
+
+    throw new Error("All search options failed or were blocked by CAPTCHA");
+  }
+
+  /**
+   * Helper to extract the primary official domain of the entity from search results.
+   */
+  private extractDomainFromSearch(scrapedPage: ScrapedPage): string | null {
+    const skipDomains = [
+      "google.com", "duckduckgo.com", "bing.com", "wikipedia.org", "wiktionary.org",
+      "youtube.com", "twitter.com", "linkedin.com", "facebook.com", "instagram.com",
+      "github.com", "medium.com", "reddit.com", "quora.com", "pinterest.com",
+      "tavily.com", "yahoo.com", "outlook.com", "apple-touch-icon", "favicon"
+    ];
+
+    // Case A: Tavily search results (structured list)
+    if (scrapedPage.extractedData?.results && Array.isArray(scrapedPage.extractedData.results)) {
+      for (const res of scrapedPage.extractedData.results) {
+        if (res.url) {
+          try {
+            const u = new URL(res.url);
+            const host = u.hostname.replace(/^www\./, "").toLowerCase();
+            if (!skipDomains.some(d => host.includes(d))) {
+              return host;
+            }
+          } catch {}
+        }
+      }
+    }
+
+    // Case B: HTML/Wikipedia text links (regex search)
+    const urlPattern = /https?:\/\/([a-zA-Z0-9][-a-zA-Z0-9]*\.)+[a-zA-Z]{2,}/g;
+    const matches = scrapedPage.content.match(urlPattern);
+    if (matches) {
+      for (const m of matches) {
+        try {
+          const u = new URL(m);
+          const host = u.hostname.replace(/^www\./, "").toLowerCase();
+          if (!skipDomains.some(d => host.includes(d))) {
+            return host;
+          }
+        } catch {}
+      }
+    }
+
+    return null;
   }
 }
 

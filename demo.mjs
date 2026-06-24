@@ -2,7 +2,7 @@
 // Usage: npm run demo
 // Requires: npm run dev (in a separate terminal)
 
-const API = "http://localhost:3001";
+const API = "http://localhost:3002";
 const DELAY = 1200;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
