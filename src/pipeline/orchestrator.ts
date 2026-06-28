@@ -350,8 +350,8 @@ export class ResearchOrchestrator {
               );
               throw new Error("Direct scrape insufficient");
             }
-          } catch {
-            // Strategy B: Search fallback
+            } catch {
+            // Strategy B: Search fallback + Target Deep-Drill
             try {
               const scrapedPage = await this.executeSearch(query, domain);
               step.scrapedData.push(scrapedPage);
@@ -362,6 +362,9 @@ export class ResearchOrchestrator {
                 scrapedPage.title
               );
               step.findings.push(...claims);
+
+              // Target Deep-Drill: Use Tavily search pointers to deep-probe official APIs
+              await this.executeTargetDeepDrill(scrapedPage, query, step, domainsVisited);
             } catch (searchErr: any) {
               logger.warn(
                 { error: searchErr.message },
@@ -410,34 +413,8 @@ export class ResearchOrchestrator {
             );
             step.findings.push(...claims);
 
-            // DYNAMIC DEEP API DISCOVERY LOOP:
-            // Extract the official domain of the target entity from search results
-            const discoveredDomain = this.extractDomainFromSearch(scrapedPage);
-            if (discoveredDomain && !domainsVisited.has(discoveredDomain)) {
-              logger.info({ discoveredDomain }, "[Orchestrator] Dynamically discovered official domain from search results — triggering API sniffing loop");
-              domainsVisited.add(discoveredDomain);
-
-              // 1. Run API Discovery
-              const apiDiscovery = getApiDiscovery();
-              const apiEndpoints = await apiDiscovery.discover(discoveredDomain);
-              step.discoveredEndpoints.push(...apiEndpoints);
-
-              if (apiEndpoints.length > 0) {
-                const apiFindings = await this.queryApiEndpoints(query, apiEndpoints, discoveredDomain);
-                step.usedEndpoints.push(...apiEndpoints.filter(ep => ep.successCount > 0));
-                step.findings.push(...apiFindings);
-              }
-
-              // 2. Run Network Sniffing
-              const sniffer = getNetworkSniffer();
-              const sniffed = await sniffer.sniff(`https://${discoveredDomain}`);
-              step.sniffedEndpoints.push(...sniffed);
-
-              if (sniffed.length > 0) {
-                const sniffFindings = await this.queryApiEndpoints(query, sniffed, discoveredDomain);
-                step.findings.push(...sniffFindings);
-              }
-            }
+            // Target Deep-Drill: Trigger deep API discovery loop for top target domains
+            await this.executeTargetDeepDrill(scrapedPage, query, step, domainsVisited);
           } catch (err: any) {
             logger.warn({ error: err.message }, "[Orchestrator] Search fallback failed");
           }
@@ -737,13 +714,64 @@ export class ResearchOrchestrator {
   /**
    * Helper to extract the primary official domain of the entity from search results.
    */
-  private extractDomainFromSearch(scrapedPage: ScrapedPage): string | null {
+  /**
+   * Target Deep-Drill Pipeline:
+   * Uses Tavily search results only as pointers/maps, then immediately triggers
+   * Layer 0 API discovery and Layer 1 CDP network sniffing on the target sites
+   * to fetch raw JSON payloads directly straight from primary servers!
+   */
+  private async executeTargetDeepDrill(
+    scrapedPage: ScrapedPage,
+    query: string,
+    step: ResearchStep,
+    domainsVisited: Set<string>
+  ): Promise<void> {
+    const discoveredDomains = this.extractDomainsFromSearch(scrapedPage);
+    for (const discoveredDomain of discoveredDomains) {
+      if (domainsVisited.has(discoveredDomain)) continue;
+      domainsVisited.add(discoveredDomain);
+
+      logger.info(
+        { discoveredDomain },
+        "[Target Deep-Drill] Probing target domain for raw backend APIs & CDP network sniffing"
+      );
+
+      try {
+        // 1. Layer 0 API Discovery
+        const apiDiscovery = getApiDiscovery();
+        const apiEndpoints = await apiDiscovery.discover(discoveredDomain);
+        if (apiEndpoints.length > 0) {
+          step.discoveredEndpoints.push(...apiEndpoints);
+          const apiFindings = await this.queryApiEndpoints(query, apiEndpoints, discoveredDomain);
+          step.usedEndpoints.push(...apiEndpoints.filter((ep) => ep.successCount > 0));
+          step.findings.push(...apiFindings);
+        }
+
+        // 2. Layer 1 Network Sniffing on target site
+        const sniffer = getNetworkSniffer();
+        const sniffed = await sniffer.sniff(`https://${discoveredDomain}`);
+        if (sniffed.length > 0) {
+          step.sniffedEndpoints.push(...sniffed);
+          const sniffFindings = await this.queryApiEndpoints(query, sniffed, discoveredDomain);
+          step.findings.push(...sniffFindings);
+        }
+      } catch (err: any) {
+        logger.warn({ domain: discoveredDomain, error: err.message }, "[Target Deep-Drill] Deep probe failed for domain");
+      }
+    }
+  }
+
+  /**
+   * Helper to extract the primary official domains of the entity from search results.
+   */
+  private extractDomainsFromSearch(scrapedPage: ScrapedPage, maxDomains = 3): string[] {
     const skipDomains = [
       "google.com", "duckduckgo.com", "bing.com", "wikipedia.org", "wiktionary.org",
       "youtube.com", "twitter.com", "linkedin.com", "facebook.com", "instagram.com",
       "github.com", "medium.com", "reddit.com", "quora.com", "pinterest.com",
       "tavily.com", "yahoo.com", "outlook.com", "apple-touch-icon", "favicon"
     ];
+    const foundDomains: string[] = [];
 
     // Case A: Tavily search results (structured list)
     if (scrapedPage.extractedData?.results && Array.isArray(scrapedPage.extractedData.results)) {
@@ -752,8 +780,9 @@ export class ResearchOrchestrator {
           try {
             const u = new URL(res.url);
             const host = u.hostname.replace(/^www\./, "").toLowerCase();
-            if (!skipDomains.some(d => host.includes(d))) {
-              return host;
+            if (!skipDomains.some(d => host.includes(d)) && !foundDomains.includes(host)) {
+              foundDomains.push(host);
+              if (foundDomains.length >= maxDomains) return foundDomains;
             }
           } catch {}
         }
@@ -768,14 +797,15 @@ export class ResearchOrchestrator {
         try {
           const u = new URL(m);
           const host = u.hostname.replace(/^www\./, "").toLowerCase();
-          if (!skipDomains.some(d => host.includes(d))) {
-            return host;
+          if (!skipDomains.some(d => host.includes(d)) && !foundDomains.includes(host)) {
+            foundDomains.push(host);
+            if (foundDomains.length >= maxDomains) return foundDomains;
           }
         } catch {}
       }
     }
 
-    return null;
+    return foundDomains;
   }
 }
 
