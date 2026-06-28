@@ -10,7 +10,7 @@
 
 ---
 
-## 📋 Table of Contents
+## Table of Contents
 
 - [Overview & Core Philosophy](#overview--core-philosophy)
 - [Architecture Layers](#architecture-layers)
@@ -29,7 +29,7 @@
 
 ---
 
-## 💡 Overview & Core Philosophy
+## Overview & Core Philosophy
 
 Searching for APIs is Ultron's underlying mechanism, while delivering **ultra-valid, grounded, and factual data** is its core mission. Obtaining data directly from backend APIs provides significant advantages in data integrity over standard web scraping:
 
@@ -39,7 +39,7 @@ Searching for APIs is Ultron's underlying mechanism, while delivering **ultra-va
 
 ---
 
-## 🏗️ Architecture Layers
+## Architecture Layers
 
 Ultron operates across five distinct operational layers, executing sequentially from fastest to most thorough:
 
@@ -55,7 +55,7 @@ Additionally, a built-in **Knowledge Router** handles pre-configured pathways fo
 
 ---
 
-## 🚀 Recent Advanced Innovations
+## Recent Advanced Innovations
 
 ### 1. Two-Pass Hybrid Contradiction Engine (Layer 3)
 To eliminate conflicting claims across heterogeneous data sources without sacrificing execution speed or inflating token costs:
@@ -75,7 +75,7 @@ Engineered specifically for low-resource environments (e.g., 2GB VPS or light cl
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 * **Runtime**: Node.js v18+ (ES Modules)
 * **Language**: TypeScript 5.5+
@@ -88,7 +88,7 @@ Engineered specifically for low-resource environments (e.g., 2GB VPS or light cl
 
 ---
 
-## 📁 Directory Structure
+## Directory Structure
 
 ```
 deep-research-agent/
@@ -119,7 +119,7 @@ deep-research-agent/
 
 ---
 
-## ⚙️ Environment Variables & Configuration
+## Environment Variables & Configuration
 
 Copy `.env.example` to `.env` and adjust the variables accordingly:
 
@@ -143,7 +143,7 @@ cp .env.example .env
 
 ---
 
-## 🚀 Quick Start & Local Development
+## Quick Start & Local Development
 
 ### 1. Clone & Install Dependencies
 
@@ -181,7 +181,7 @@ console.log(result.summary);
 
 ---
 
-## 📑 REST API Reference
+## REST API Reference
 
 Ultron exposes a full REST API for programmatic research invocation and agent-to-agent integration.
 
@@ -223,7 +223,7 @@ Returns system status, uptime, L1/L2 cache statistics, and CROO network state.
 
 ---
 
-## 🧪 Testing & Verification
+## Testing & Verification
 
 Run the test suite powered by **Vitest**:
 
@@ -239,13 +239,13 @@ npx tsc --noEmit
 
 ---
 
-## 🌐 CROO CAP Protocol Integration
+## CROO CAP Protocol Integration
 
 Ultron is natively instrumented with the **CROO CAP Protocol** (`@croo-network/sdk`). When enabled (`CROO_ENABLED=true`), Ultron registers itself on Base Mainnet as a discoverable, autonomous research agent. Other agents in the CROO network can query Ultron, negotiate task execution, and settle micro-payments on-chain via smart contracts.
 
 ---
 
-## 📜 License
+## License
 
 Distributed under the **MIT License**. See [LICENSE](file:///home/ubuntu/deep-research-agent/LICENSE) for more information.
 
