@@ -1,4 +1,5 @@
 import { logger } from "../utils/logger.js";
+import { config } from "../config.js";
 import type { Finding, Evidence, Citation, ResearchStep } from "../types.js";
 
 /**
@@ -87,29 +88,25 @@ export class CitationGrounding {
   }
 
   /**
-   * Check for contradictions between findings.
-   * Returns pairs of findings that appear to disagree.
+   * Check for contradictions between findings using Two-Pass Hybrid Verification:
+   *  Pass 1: Fast heuristic candidate selection (keyword overlap & negation check)
+   *  Pass 2: Targeted LLM reasoning verification for candidate pairs
+   * Returns pairs of findings that contradict each other, adjusting confidence scores downwards by 30%.
    */
-  detectContradictions(findings: Finding[]): {
+  async detectContradictions(findings: Finding[]): Promise<{
     findingA: string;
     findingB: string;
     description: string;
-  }[] {
-    const contradictions: {
-      findingA: string;
-      findingB: string;
-      description: string;
-    }[] = [];
-
-    // Simple heuristic: same topic, opposite polarity keywords
+  }[]> {
+    const candidatePairs: { findingA: Finding; findingB: Finding; overlap: string[] }[] = [];
     const negations = ["not", "no", "never", "doesn't", "don't", "isn't", "aren't", "won't"];
 
+    // Pass 1: Fast Heuristic Candidate Filtering
     for (let i = 0; i < findings.length; i++) {
       for (let j = i + 1; j < findings.length; j++) {
         const a = findings[i].claim.toLowerCase();
         const b = findings[j].claim.toLowerCase();
 
-        // Check if they share significant keyword overlap but contradict
         const aWords = new Set(a.split(/\s+/));
         const bWords = new Set(b.split(/\s+/));
         const overlap = [...aWords].filter((w) => bWords.has(w) && w.length > 3);
@@ -117,20 +114,111 @@ export class CitationGrounding {
         const hasNegationA = negations.some((n) => a.includes(` ${n} `));
         const hasNegationB = negations.some((n) => b.includes(` ${n} `));
 
-        if (overlap.length >= 3 && hasNegationA !== hasNegationB) {
-          contradictions.push({
-            findingA: findings[i].id,
-            findingB: findings[j].id,
-            description: `Contradictory claims about: ${overlap.slice(0, 3).join(", ")}`,
+        if (overlap.length >= 3 || (overlap.length >= 2 && hasNegationA !== hasNegationB)) {
+          candidatePairs.push({
+            findingA: findings[i],
+            findingB: findings[j],
+            overlap,
           });
         }
+      }
+    }
+
+    if (candidatePairs.length === 0) {
+      return [];
+    }
+
+    logger.info(
+      { candidatePairsCount: candidatePairs.length },
+      "[Layer 3] Fast filter identified potential contradiction candidates for LLM verification"
+    );
+
+    const contradictions: {
+      findingA: string;
+      findingB: string;
+      description: string;
+    }[] = [];
+
+    // Pass 2: LLM Verification (or Fallback if LLM unavailable)
+    for (const pair of candidatePairs) {
+      let isContradiction = false;
+      let reasoning = "";
+
+      if (config.llm.apiKey) {
+        try {
+          const prompt = `Evaluate if the following two claims semantically contradict each other.
+Claim A: "${pair.findingA.claim}"
+Claim B: "${pair.findingB.claim}"
+
+Respond ONLY with a valid JSON object matching this format:
+{"isContradiction": boolean, "reasoning": "short explanation of contradiction"}`;
+
+          const response = await fetch(`${config.llm.baseUrl}/chat/completions`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${config.llm.apiKey}`,
+            },
+            body: JSON.stringify({
+              model: config.llm.model,
+              messages: [
+                { role: "system", content: "You are a logical verification agent specialized in detecting semantic contradictions between research claims." },
+                { role: "user", content: prompt },
+              ],
+              temperature: 0,
+              max_tokens: 200,
+            }),
+          });
+
+          if (response.ok) {
+            const data = (await response.json()) as any;
+            const content = data.choices?.[0]?.message?.content || "";
+            const jsonMatch = content.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+              const parsed = JSON.parse(jsonMatch[0]);
+              isContradiction = Boolean(parsed.isContradiction);
+              reasoning = parsed.reasoning || "Semantic contradiction confirmed by LLM reasoning.";
+            }
+          }
+        } catch (err: any) {
+          logger.warn({ error: err.message }, "[Layer 3] LLM contradiction check failed, using fallback heuristic");
+        }
+      }
+
+      // Fallback if LLM skipped or failed: check basic negation heuristic
+      if (!isContradiction && (!config.llm.apiKey || !reasoning) && pair.overlap.length >= 3) {
+        const a = pair.findingA.claim.toLowerCase();
+        const b = pair.findingB.claim.toLowerCase();
+        const hasNegationA = negations.some((n) => a.includes(` ${n} `));
+        const hasNegationB = negations.some((n) => b.includes(` ${n} `));
+        if (hasNegationA !== hasNegationB) {
+          isContradiction = true;
+          reasoning = `Contradictory claims about: ${pair.overlap.slice(0, 3).join(", ")}`;
+        }
+      }
+
+      if (isContradiction) {
+        // Flag both findings and adjust confidence score downwards by 30%
+        pair.findingA.isContradictory = true;
+        pair.findingB.isContradictory = true;
+        pair.findingA.contradictionReason = reasoning;
+        pair.findingB.contradictionReason = reasoning;
+
+        pair.findingA.confidence = Math.max(0.1, Math.round(pair.findingA.confidence * 0.7 * 100) / 100);
+        pair.findingB.confidence = Math.max(0.1, Math.round(pair.findingB.confidence * 0.7 * 100) / 100);
+
+        contradictions.push({
+          findingA: pair.findingA.id,
+          findingB: pair.findingB.id,
+          description: reasoning,
+        });
       }
     }
 
     if (contradictions.length > 0) {
       logger.warn(
         { count: contradictions.length },
-        "[Layer 3] Potential contradictions detected"
+        "[Layer 3] Confirmed contradictions detected and findings adjusted"
       );
     }
 

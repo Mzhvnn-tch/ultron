@@ -83,6 +83,8 @@ export interface Finding {
   evidence: Evidence[];
   confidence: number; // 0–1
   sourceUrls: string[];
+  isContradictory?: boolean;
+  contradictionReason?: string;
 }
 
 export interface Evidence {

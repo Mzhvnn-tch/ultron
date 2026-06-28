@@ -150,7 +150,7 @@ export class ResearchOrchestrator {
     const grounding = getCitationGrounding();
     const groundedFindings = grounding.groundFindings(allFindings, steps[steps.length - 1]);
     const citations = grounding.generateCitations(groundedFindings);
-    const contradictions = grounding.detectContradictions(groundedFindings);
+    const contradictions = await grounding.detectContradictions(groundedFindings);
 
     if (contradictions.length > 0) {
       logger.warn({ contradictions }, "[Orchestrator] Contradictions found");
