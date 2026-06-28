@@ -5,7 +5,7 @@ import { getBrowserPool } from "./browser/pool.js";
 import { config } from "./config.js";
 
 /**
- * Deep Research Agent — Main Entry Point
+ * Ultron — Main Entry Point
  *
  * Layers:
  *  0 — API Discovery (docs, patterns, well-known, OpenAPI parsing)
@@ -20,7 +20,7 @@ import { config } from "./config.js";
  *  Agent discoverable & payable by other agents via CROO protocol
  */
 async function main() {
-  logger.info("Deep Research Agent v1.0.0");
+  logger.info("Ultron v1.0.0");
   logger.info("4-Layer Autonomous Research Engine");
 
   // Initialize endpoint cache (SQLite)
@@ -35,19 +35,8 @@ async function main() {
   // Warm up browser pool (pre-launch 2 Chromium instances)
   await getBrowserPool().warmUp(2);
 
-  // Start HTTP server
+  // Start HTTP server (handles graceful shutdown internally)
   startServer();
-
-  // Graceful shutdown
-  const shutdown = async () => {
-    logger.info("Shutting down...");
-    await getBrowserPool().shutdown();
-    cache.close();
-    process.exit(0);
-  };
-
-  process.on("SIGTERM", shutdown);
-  process.on("SIGINT", shutdown);
 }
 
 main().catch((err) => {

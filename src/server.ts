@@ -40,7 +40,7 @@ app.get("/health", (_req: Request, res: Response) => {
     uptime: process.uptime(),
     cache: cache.stats(),
     cap: {
-      enabled: config.cap.enabled,
+      enabled: config.croo.enabled,
       identity: getCapWrapper().getIdentity().did,
     },
   });
@@ -254,51 +254,22 @@ app.get("/pool/stats", (_req: Request, res: Response) => {
   res.json(getBrowserPool().stats());
 });
 
-// ─── CAP Protocol Endpoints ────────────────────────────
+// ─── CROO CAP Protocol Endpoints ──────────────────────
 
-if (config.cap.enabled) {
+if (config.croo.enabled) {
   const cap = getCapWrapper();
 
   app.get("/cap/identity", (_req: Request, res: Response) => {
     res.json(cap.getIdentity());
   });
 
-  app.get("/cap/orders", (_req: Request, res: Response) => {
-    res.json(cap.listOrders());
-  });
-
-  app.get("/cap/orders/:orderId", (req: Request, res: Response) => {
-    const order = cap.getOrderStatus(req.params.orderId);
-    if (!order) {
-      res.status(404).json({ error: "Order not found" });
-      return;
-    }
-    res.json(order);
-  });
-
-  /**
-   * CAP Order endpoint — called by CAP infrastructure when another agent
-   * places an order for research capability.
-   */
   app.post("/cap/order", async (req: Request, res: Response) => {
     try {
-      const order = req.body;
-      if (!order.orderId || !order.capabilityId) {
-        res.status(400).json({ error: "Invalid CAP order" });
-        return;
-      }
-
-      logger.info({ orderId: order.orderId }, "[CAP] Incoming order");
-
-      const delivery = await cap.handleOrder(order);
-      if (!delivery) {
-        res.status(400).json({ error: "Order rejected" });
-        return;
-      }
-
-      res.json({ status: "delivered", delivery });
+      logger.info({ body: req.body }, "[CROO] Incoming HTTP order");
+      const delivery = await cap.handleOrderHttp(req.body);
+      res.json({ status: "delivered", ...delivery });
     } catch (err: any) {
-      logger.error({ error: err.message }, "[CAP] Order handling error");
+      logger.error({ error: err.message }, "[CROO] HTTP order error");
       res.status(500).json({ error: "Order processing failed" });
     }
   });
@@ -314,22 +285,33 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 // ─── Start ─────────────────────────────────────────────
 
 export function startServer(): void {
-  app.listen(config.server.port, config.server.host, () => {
+  const server = app.listen(config.server.port, config.server.host, () => {
     logger.info(
       {
         host: config.server.host,
         port: config.server.port,
-        cap: config.cap.enabled ? "enabled" : "disabled",
+        croo: config.croo.enabled ? "enabled" : "disabled",
       },
-      "Deep Research Agent server started"
+      "Ultron server started"
     );
 
-    // Register with CAP if enabled
-    if (config.cap.enabled) {
-      getCapWrapper().register().catch((err) => {
-        logger.warn({ error: err.message }, "[CAP] Initial registration failed");
+    if (config.croo.enabled) {
+      getCapWrapper().initialize().catch((err) => {
+        logger.warn({ error: err.message }, "[CROO] Initialization failed");
       });
     }
+  });
+
+  process.on("SIGTERM", () => {
+    logger.info("Shutting down...");
+    getCapWrapper().shutdown();
+    server.close(() => process.exit(0));
+  });
+
+  process.on("SIGINT", () => {
+    logger.info("Shutting down...");
+    getCapWrapper().shutdown();
+    server.close(() => process.exit(0));
   });
 }
 

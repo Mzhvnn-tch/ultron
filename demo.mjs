@@ -1,4 +1,4 @@
-// demo.mjs — Deep Research Agent Demo
+// demo.mjs — Ultron Demo
 // Usage: npm run demo
 // Requires: npm run dev (in a separate terminal)
 
@@ -224,7 +224,7 @@ async function demoCache() {
 
 async function main() {
   console.log();
-  console.log("Deep Research Agent");
+  console.log("Ultron");
   console.log("4-Layer Autonomous Research Engine");
   console.log(`${new Date().toISOString()}`);
 

@@ -29,10 +29,11 @@ export const config = {
     requestDelayMs: parseInt(process.env.REQUEST_DELAY_MS || "500"),
   },
 
-  cap: {
-    enabled: process.env.CAP_ENABLED === "true",
-    registryUrl: process.env.CAP_REGISTRY_URL || "http://localhost:4000",
-    agentPrivateKey: process.env.CAP_AGENT_PRIVATE_KEY || "",
+  croo: {
+    enabled: process.env.CROO_ENABLED === "true",
+    apiUrl: process.env.CROO_API_URL || "https://api.croo.network",
+    wsUrl: process.env.CROO_WS_URL || "wss://api.croo.network/ws",
+    sdkKey: process.env.CROO_SDK_KEY || "",
   },
 };
 
