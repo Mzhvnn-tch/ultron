@@ -110,7 +110,7 @@ const CRYPTO_ROUTES: KnowledgeRoute[] = [
     },
   },
   {
-    keywords: ["yield", "apy", "staking", "apr", "lending", "bunga", "yield eth"],
+    keywords: ["yield eth", "eth yield", "crypto yield", "staking yield", "apy", "staking", "lending crypto"],
     description: "ETH staking & lending yield from DefiLlama",
     query: async () => {
       const http = createHttpClient();
