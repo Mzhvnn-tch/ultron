@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "description": "Autonomous deep research agent with API-first discovery, network sniffing, stealth scraping, and iterative grounding",
+  "license": "MIT",
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
