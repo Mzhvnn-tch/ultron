@@ -1,6 +1,6 @@
-# Deep Research Agent
+# Ultron
 
-Autonomous research engine that goes beyond scraping — it **discovers and talks directly to APIs**, bypasses frontend UIs, and synthesizes grounded findings with citations.
+Autonomous deep research agent that goes beyond scraping — it **discovers and talks directly to APIs**, bypasses frontend UIs, and synthesizes grounded findings with citations.
 
 ## What Makes This Different
 
@@ -57,7 +57,7 @@ npm run dev
 Server starts at `http://localhost:3002`. You'll see:
 
 ```
-Deep Research Agent server started { host: '0.0.0.0', port: 3002 }
+Ultron server started { host: '0.0.0.0', port: 3002 }
 ```
 
 ---
