@@ -1,8 +1,8 @@
-# 🧠 Deep Research Agent
+# Deep Research Agent
 
 Autonomous research engine that goes beyond scraping — it **discovers and talks directly to APIs**, bypasses frontend UIs, and synthesizes grounded findings with citations.
 
-## ✨ What Makes This Different
+## What Makes This Different
 
 Most research agents scrape HTML. This one reverse-engineers the actual data layer.
 
@@ -18,7 +18,7 @@ Plus a **Knowledge Router** with pre-built routes for crypto/DeFi, finance, news
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### 1. Clone & Install
 
@@ -43,7 +43,7 @@ LLM_BASE_URL=https://api.openai.com/v1   # Any OpenAI-compatible API
 LLM_MODEL=gpt-4o
 
 # Optional: defaults are fine for hackathon
-PORT=3001
+PORT=3002
 ```
 
 > **Note:** The agent works without an LLM key — it falls back to heuristic synthesis. But with a key, query decomposition and result summaries are significantly better.
@@ -54,15 +54,15 @@ PORT=3001
 npm run dev
 ```
 
-Server starts at `http://localhost:3001`. You'll see:
+Server starts at `http://localhost:3002`. You'll see:
 
 ```
-🚀 Deep Research Agent server started { host: '0.0.0.0', port: 3001 }
+Deep Research Agent server started { host: '0.0.0.0', port: 3002 }
 ```
 
 ---
 
-## 🔍 Usage
+## Usage
 
 ### Interactive CLI
 
@@ -71,14 +71,14 @@ Server starts at `http://localhost:3001`. You'll see:
 ```
 
 ```
-🧠  DEEP RESEARCH AGENT — Interactive Mode
+DEEP RESEARCH AGENT — Interactive Mode
   Ketik 'exit' atau 'quit' buat keluar
   Ketik 'deep:domain.com' buat pake layer 4 (bundle parser)
 ============================================================
 
-❯ harga ETH sekarang
-❯ deep:uniswap.org
-❯ apa itu sumopod.com
+$ harga ETH sekarang
+$ deep:uniswap.org
+$ apa itu sumopod.com
 ```
 
 ### Single Query CLI
@@ -91,12 +91,12 @@ Server starts at `http://localhost:3001`. You'll see:
 
 ---
 
-## 📡 REST API
+## REST API
 
 ### `POST /research` — Full Research
 
 ```bash
-curl -X POST http://localhost:3001/research \
+curl -X POST http://localhost:3002/research \
   -H "Content-Type: application/json" \
   -d '{
     "query": "ETH price and DeFi TVL",
@@ -121,7 +121,7 @@ curl -X POST http://localhost:3001/research \
 ### `POST /research/quick` — Fast Research (≤2 depth, ≤5 sources)
 
 ```bash
-curl -X POST http://localhost:3001/research/quick \
+curl -X POST http://localhost:3002/research/quick \
   -H "Content-Type: application/json" \
   -d '{"query": "bitcoin price"}'
 ```
@@ -131,7 +131,7 @@ curl -X POST http://localhost:3001/research/quick \
 Reverse-engineers a website's JS bundles to extract raw API endpoints.
 
 ```bash
-curl -X POST http://localhost:3001/research/deep \
+curl -X POST http://localhost:3002/research/deep \
   -H "Content-Type: application/json" \
   -d '{"domain": "uniswap.org", "query": "liquidity pools"}'
 ```
@@ -146,7 +146,7 @@ curl -X POST http://localhost:3001/research/deep \
 ### `POST /research/verify` — Fact Verification
 
 ```bash
-curl -X POST http://localhost:3001/research/verify \
+curl -X POST http://localhost:3002/research/verify \
   -H "Content-Type: application/json" \
   -d '{"query": "is ETH proof of stake?"}'
 ```
@@ -163,22 +163,23 @@ curl -X POST http://localhost:3001/research/verify \
 
 ---
 
-## 🤖 CAP Protocol (Agent-to-Agent Marketplace)
+## CROO CAP Protocol (Agent-to-Agent Marketplace)
 
-This agent is discoverable and callable by other agents via the **CROO CAP protocol**.
+This agent is discoverable and callable by other agents via the **CROO CAP protocol** on Base.
 
 Enable in `.env`:
 ```env
-CAP_ENABLED=true
-CAP_REGISTRY_URL=http://localhost:4000
-CAP_AGENT_PRIVATE_KEY=0x...
+CROO_ENABLED=true
+CROO_API_URL=https://api.croo.network
+CROO_WS_URL=wss://api.croo.network/ws
+CROO_SDK_KEY=croo_sk_...
 ```
 
-Other agents can place orders at `POST /cap/order` and receive research results programmatically.
+Other agents can discover this agent on the [CROO Agent Store](https://agent.croo.network) and place orders with on-chain settlement in USDC.
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 ```
 Request
@@ -213,7 +214,7 @@ ResearchResult { summary, findings, citations, endpoints }
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 - **Runtime:** Node.js + TypeScript
 - **HTTP Server:** Express
@@ -225,7 +226,7 @@ ResearchResult { summary, findings, citations, endpoints }
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 src/
@@ -256,7 +257,7 @@ src/
 
 ---
 
-## ⚡ Performance Notes
+## Performance Notes
 
 - **Knowledge Router** answers in <500ms for known topics (crypto, finance, etc.)
 - **Layer 0 (API)** is fastest for sites with OpenAPI specs
@@ -266,7 +267,7 @@ src/
 
 ---
 
-## 🔒 Security Notes
+## Security Notes
 
 - `.env` is gitignored — never commit API keys
 - Rate limiting is built-in (`REQUEST_DELAY_MS`, `MAX_CONCURRENT_DOMAINS`)
