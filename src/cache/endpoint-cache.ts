@@ -17,6 +17,10 @@ export class EndpointCache {
   private getByUrlStmt: Database.Statement;
   private updateStatsStmt: Database.Statement;
 
+  // Bounded L1 RAM Cache (VPS 2GB Optimized - capped at 500 items)
+  private l1Cache: Map<string, DiscoveredEndpoint> = new Map();
+  private MAX_L1_SIZE = 500;
+
   constructor() {
     const dbPath = config.cache.dbPath;
     fs.mkdirSync(path.dirname(dbPath), { recursive: true });
@@ -84,6 +88,14 @@ export class EndpointCache {
     }
   }
 
+  private addToL1(endpoint: DiscoveredEndpoint): void {
+    if (this.l1Cache.size >= this.MAX_L1_SIZE && !this.l1Cache.has(endpoint.url)) {
+      const firstKey = this.l1Cache.keys().next().value;
+      if (firstKey) this.l1Cache.delete(firstKey);
+    }
+    this.l1Cache.set(endpoint.url, endpoint);
+  }
+
   /** Store a discovered endpoint */
   save(endpoint: DiscoveredEndpoint): void {
     const domain = EndpointCache.extractDomain(endpoint.url);
@@ -105,6 +117,7 @@ export class EndpointCache {
       successCount: endpoint.successCount,
       failCount: endpoint.failCount,
     });
+    this.addToL1(endpoint);
     logger.debug({ url: endpoint.url, source: endpoint.source }, "Endpoint cached");
   }
 
@@ -120,13 +133,25 @@ export class EndpointCache {
   /** Get all cached endpoints for a domain */
   getForDomain(domain: string): DiscoveredEndpoint[] {
     const rows = this.getByDomainStmt.all(domain) as any[];
-    return rows.map(this.rowToEndpoint);
+    const endpoints = rows.map(this.rowToEndpoint);
+    for (const ep of endpoints) {
+      this.addToL1(ep);
+    }
+    return endpoints;
   }
 
   /** Check if an endpoint URL is already cached */
   getByUrl(url: string): DiscoveredEndpoint | null {
+    if (this.l1Cache.has(url)) {
+      return this.l1Cache.get(url)!;
+    }
     const row = this.getByUrlStmt.get(url) as any;
-    return row ? this.rowToEndpoint(row) : null;
+    if (row) {
+      const ep = this.rowToEndpoint(row);
+      this.addToL1(ep);
+      return ep;
+    }
+    return null;
   }
 
   /**
@@ -152,7 +177,12 @@ export class EndpointCache {
     if (!existing) return;
     const successCount = existing.successCount + 1;
     const confidence = Math.min(1, existing.confidence + 0.05);
-    this.updateStatsStmt.run(Date.now(), successCount, existing.failCount, confidence, url);
+    const now = Date.now();
+    this.updateStatsStmt.run(now, successCount, existing.failCount, confidence, url);
+    existing.successCount = successCount;
+    existing.confidence = confidence;
+    existing.lastUsedAt = now;
+    this.addToL1(existing);
   }
 
   /** Record a failed API call (lowers confidence) */
@@ -161,7 +191,12 @@ export class EndpointCache {
     if (!existing) return;
     const failCount = existing.failCount + 1;
     const confidence = Math.max(0.1, existing.confidence - 0.1);
-    this.updateStatsStmt.run(Date.now(), existing.successCount, failCount, confidence, url);
+    const now = Date.now();
+    this.updateStatsStmt.run(now, existing.successCount, failCount, confidence, url);
+    existing.failCount = failCount;
+    existing.confidence = confidence;
+    existing.lastUsedAt = now;
+    this.addToL1(existing);
   }
 
   /** Get all domains we know about */
