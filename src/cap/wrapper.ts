@@ -110,7 +110,7 @@ export class CapWrapper {
           name: "Deep Research",
           description:
             "Autonomous multi-source research with API-first discovery, network sniffing, stealth scraping, and citation grounding. Returns structured findings with verifiable sources.",
-          price: "1000000000000000",
+          price: "10000000000000",
           token: "ETH",
           maxInputLength: 1000,
           estimatedDuration: 30000,
