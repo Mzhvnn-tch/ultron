@@ -19,6 +19,7 @@
 
 import { createHttpClient } from "../utils/http.js";
 import { logger } from "../utils/logger.js";
+import { getUniversalResolver } from "./universal-resolver.js";
 import type { Finding } from "../types.js";
 
 // ─── Wikipedia Cache ──────────────────────────────
@@ -368,6 +369,27 @@ export class KnowledgeRouter {
     const queryLower = query.toLowerCase();
     const allFindings: Finding[] = [];
     let matchedRoutes: string[] = [];
+
+    // ─── Phase 0 Universal Entity & Asset Resolution ───
+    if (/\b(wallet|trader|dompet|saham|investor|holding|sec edgar|perusahaan|founder|eksekutif|portfolio|posisi|trade)\b/i.test(queryLower)) {
+      try {
+        const resolver = getUniversalResolver();
+        const profile = await resolver.resolveEntity(queryLower);
+        if (profile.overallConfidence > 0.50) {
+          const univFindings = resolver.profileToFindings(profile);
+          if (univFindings.length > 0) {
+            logger.info({ targetName: profile.targetName, findingsCount: univFindings.length }, "[Knowledge] Universal Entity & Asset Resolver matched — instant high-precision answer");
+            return {
+              findings: univFindings,
+              matched: true,
+              routeName: `Universal Resolver (${profile.targetName})`,
+            };
+          }
+        }
+      } catch (err: any) {
+        logger.warn({ error: err.message }, "[Knowledge] Universal Resolver failed, falling through");
+      }
+    }
 
     // Check all routes for keyword matches — return ALL matches
     for (const [category, routes] of Object.entries(ALL_ROUTES)) {

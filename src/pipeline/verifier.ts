@@ -55,6 +55,18 @@ export class Verifier {
         }
       }
 
+      // Check Temporal Staleness (60-second threshold for quantitative facts)
+      const stalenessWarning = this.checkTemporalStaleness(finding);
+      if (stalenessWarning) {
+        warnings.push(stalenessWarning);
+      }
+
+      // Check Numerical Variance (>2% deviation check)
+      const varianceWarning = this.checkNumericalVariance(finding);
+      if (varianceWarning) {
+        warnings.push(varianceWarning);
+      }
+
       verifiedFindings.push(finding);
     }
 
@@ -149,6 +161,54 @@ export class Verifier {
 
     const score = avgConf * 0.4 + diversityScore * 0.25 + evidenceScore * 0.35 - warningPenalty;
     return Math.max(0, Math.min(1, Math.round(score * 100) / 100));
+  }
+
+  /** Check if finding evidence contains quantitative data older than 60 seconds */
+  private checkTemporalStaleness(finding: Finding): string | null {
+    const now = Date.now();
+    const STALENESS_THRESHOLD_MS = 60_000; // 60 seconds
+
+    const isQuantitative = /\b(\$?\d+(\.\d+)?\s*(usdt|usd|eth|sol|tvl|price|volume|mcap|k|m|b)?)\b/i.test(finding.claim);
+    if (!isQuantitative) return null;
+
+    for (const ev of finding.evidence) {
+      if (ev.extractedAt && now - ev.extractedAt > STALENESS_THRESHOLD_MS) {
+        finding.isStale = true;
+        finding.confidence = Math.round(finding.confidence * 0.5 * 100) / 100; // 50% penalty
+        return `[TEMPORAL STALENESS WARNING] Finding "${finding.claim.substring(0, 60)}..." is older than 60s (stale) — confidence reduced to ${(finding.confidence * 100).toFixed(0)}%`;
+      }
+    }
+    return null;
+  }
+
+  /** Check if evidence numbers contain mathematical deviation > 2% */
+  private checkNumericalVariance(finding: Finding): string | null {
+    if (finding.evidence.length < 2) return null;
+
+    const numbers: number[] = [];
+    for (const ev of finding.evidence) {
+      const matches = ev.text.match(/\b\d+(\.\d+)?\b/g);
+      if (matches) {
+        for (const m of matches) {
+          const val = parseFloat(m);
+          if (!isNaN(val) && val > 0) numbers.push(val);
+        }
+      }
+    }
+
+    if (numbers.length < 2) return null;
+
+    const maxVal = Math.max(...numbers);
+    const minVal = Math.min(...numbers);
+    const deviationPercent = ((maxVal - minVal) / minVal) * 100;
+
+    if (deviationPercent > 2) {
+      finding.varianceWarning = `Numerical variance of ${deviationPercent.toFixed(1)}% detected across evidence sources`;
+      finding.confidence = Math.round(finding.confidence * 0.5 * 100) / 100; // 50% penalty
+      return `[NUMERICAL VARIANCE WARNING] Finding "${finding.claim.substring(0, 60)}..." has ${deviationPercent.toFixed(1)}% numerical deviation across sources — confidence reduced to ${(finding.confidence * 100).toFixed(0)}%`;
+    }
+
+    return null;
   }
 }
 

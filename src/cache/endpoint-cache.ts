@@ -1,7 +1,8 @@
 import Database from "better-sqlite3";
 import { config } from "../config.js";
 import { logger } from "../utils/logger.js";
-import type { DiscoveredEndpoint } from "../types.js";
+import { getEvolutionEngine } from "../agent/evolution.js";
+import type { DiscoveredEndpoint, EvolutionLog } from "../types.js";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -16,6 +17,7 @@ export class EndpointCache {
   private getByDomainStmt: Database.Statement;
   private getByUrlStmt: Database.Statement;
   private updateStatsStmt: Database.Statement;
+  private insertEvolutionStmt: Database.Statement;
 
   // Bounded L1 RAM Cache (VPS 2GB Optimized - capped at 500 items)
   private l1Cache: Map<string, DiscoveredEndpoint> = new Map();
@@ -46,22 +48,47 @@ export class EndpointCache {
         discovered_at INTEGER NOT NULL,
         last_used_at INTEGER,
         success_count INTEGER NOT NULL DEFAULT 0,
-        fail_count INTEGER NOT NULL DEFAULT 0
+        fail_count INTEGER NOT NULL DEFAULT 0,
+        wasm_metadata TEXT
       );
       CREATE INDEX IF NOT EXISTS idx_endpoints_domain ON endpoints(domain);
       CREATE INDEX IF NOT EXISTS idx_endpoints_source ON endpoints(source);
       CREATE INDEX IF NOT EXISTS idx_endpoints_confidence ON endpoints(confidence);
+
+      CREATE TABLE IF NOT EXISTS evolution_logs (
+        id TEXT PRIMARY KEY,
+        domain TEXT NOT NULL,
+        failed_endpoint_url TEXT NOT NULL,
+        error_cause TEXT NOT NULL,
+        synthesized_patch_code TEXT,
+        sandbox_test_status TEXT NOT NULL,
+        hot_swapped_at INTEGER,
+        created_at INTEGER NOT NULL
+      );
     `);
+
+    try {
+      this.db.exec("ALTER TABLE endpoints ADD COLUMN wasm_metadata TEXT;");
+    } catch {
+      // Column already exists
+    }
 
     this.insertStmt = this.db.prepare(`
       INSERT OR REPLACE INTO endpoints
         (url, domain, method, params, headers, body_template, auth_type, auth_details,
          description, response_example, source, confidence, discovered_at, last_used_at,
-         success_count, fail_count)
+         success_count, fail_count, wasm_metadata)
       VALUES
         (@url, @domain, @method, @params, @headers, @bodyTemplate, @authType, @authDetails,
          @description, @responseExample, @source, @confidence, @discoveredAt, @lastUsedAt,
-         @successCount, @failCount)
+         @successCount, @failCount, @wasmMetadata)
+    `);
+
+    this.insertEvolutionStmt = this.db.prepare(`
+      INSERT OR REPLACE INTO evolution_logs
+        (id, domain, failed_endpoint_url, error_cause, synthesized_patch_code, sandbox_test_status, hot_swapped_at, created_at)
+      VALUES
+        (@id, @domain, @failedEndpointUrl, @errorCause, @synthesizedPatchCode, @sandboxTestStatus, @hotSwappedAt, @createdAt)
     `);
 
     this.getByDomainStmt = this.db.prepare(
@@ -116,6 +143,7 @@ export class EndpointCache {
       lastUsedAt: endpoint.lastUsedAt || null,
       successCount: endpoint.successCount,
       failCount: endpoint.failCount,
+      wasmMetadata: endpoint.wasmMetadata ? JSON.stringify(endpoint.wasmMetadata) : null,
     });
     this.addToL1(endpoint);
     logger.debug({ url: endpoint.url, source: endpoint.source }, "Endpoint cached");
@@ -197,6 +225,25 @@ export class EndpointCache {
     existing.confidence = confidence;
     existing.lastUsedAt = now;
     this.addToL1(existing);
+
+    if (confidence < 0.30 || failCount >= 3) {
+      getEvolutionEngine().evolveEndpoint(url, `Endpoint confidence degraded to ${confidence.toFixed(2)} (failures: ${failCount})`).catch(() => {});
+    }
+  }
+
+  /** Save a self-evolution log entry */
+  saveEvolutionLog(log: EvolutionLog): void {
+    this.insertEvolutionStmt.run({
+      id: log.id,
+      domain: log.domain,
+      failedEndpointUrl: log.failedEndpointUrl,
+      errorCause: log.errorCause,
+      synthesizedPatchCode: log.synthesizedPatchCode || null,
+      sandboxTestStatus: log.sandboxTestStatus,
+      hotSwappedAt: log.hotSwappedAt || null,
+      createdAt: log.createdAt,
+    });
+    logger.info({ domain: log.domain, status: log.sandboxTestStatus }, "[EndpointCache] Self-evolution journal updated");
   }
 
   /** Get all domains we know about */
@@ -242,6 +289,7 @@ export class EndpointCache {
       lastUsedAt: row.last_used_at || undefined,
       successCount: row.success_count,
       failCount: row.fail_count,
+      wasmMetadata: row.wasm_metadata ? JSON.parse(row.wasm_metadata) : undefined,
     };
   }
 

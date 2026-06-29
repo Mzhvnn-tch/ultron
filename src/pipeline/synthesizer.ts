@@ -1,5 +1,7 @@
 import { config } from "../config.js";
 import { logger } from "../utils/logger.js";
+import { KnowledgeGraphStore, getKnowledgeGraphStore } from "../cache/knowledge-graph.js";
+import { getLLMProvider } from "../utils/llm-provider.js";
 import type { Finding, ResearchStep, ResearchResult } from "../types.js";
 
 /**
@@ -25,6 +27,11 @@ export class Synthesizer {
     if (allFindings.length === 0) {
       return `No findings were discovered for query: "${query}". The research could not locate relevant information from the sources searched.`;
     }
+
+    // Store findings into Knowledge Graph & Vector Memory asynchronously
+    this.extractAndStoreKnowledge(query, allFindings).catch((err) => {
+      logger.warn({ error: err.message }, "[Synthesizer] Failed to store knowledge graph items");
+    });
 
     // Try LLM synthesis
     try {
@@ -63,33 +70,13 @@ Rules:
 - Use [1], [2] etc. for inline citations referencing the findings
 - Keep the total response under 2000 words
 - Be objective and balanced in tone`;
-
-    const response = await fetch(`${config.llm.baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${config.llm.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: config.llm.model,
-        messages: [
-          { role: "system", content: systemPrompt },
-          {
-            role: "user",
-            content: `Research Query: "${query}"\n\nDiscovered Findings:\n${findingsText}\n\nSynthesize these findings into a comprehensive research summary.`,
-          },
-        ],
-        temperature: 0.3,
-        max_tokens: 2500,
-      }),
+    const provider = getLLMProvider();
+    const summary = await provider.complete({
+      systemPrompt,
+      prompt: `Research Query: "${query}"\n\nDiscovered Findings:\n${findingsText}\n\nSynthesize these findings into a comprehensive research summary.`,
     });
 
-    if (!response.ok) {
-      throw new Error(`LLM API error: ${response.status}`);
-    }
-
-    const data = await response.json() as any;
-    return data.choices?.[0]?.message?.content || this.templateSynthesize(query, findings);
+    return summary || this.templateSynthesize(query, findings);
   }
 
   private templateSynthesize(query: string, findings: Finding[]): string {
@@ -135,6 +122,49 @@ Rules:
     summary += `${allSources.size} unique sources were consulted.\n`;
 
     return summary;
+  }
+
+  private async extractAndStoreKnowledge(query: string, findings: Finding[]): Promise<void> {
+    const kgStore = getKnowledgeGraphStore();
+    const now = Date.now();
+
+    for (const finding of findings) {
+      // Store vector memory claim
+      const vector = KnowledgeGraphStore.generateSimpleVector(finding.claim);
+      kgStore.saveVectorItem({
+        id: `vec_${finding.id}_${now}`,
+        claim: finding.claim,
+        vector,
+        entityIds: [],
+        sourceUrl: finding.sourceUrls[0],
+        createdAt: now,
+      });
+
+      // Extract basic entities & triples from query and claims
+      const words = finding.claim.split(/\s+/).filter((w) => w.length > 3 && /^[A-Z0-9]/.test(w));
+      if (words.length >= 2) {
+        const subName = words[0].replace(/[^a-zA-Z0-9]/g, "");
+        const objName = words[1].replace(/[^a-zA-Z0-9]/g, "");
+        if (subName && objName && subName !== objName) {
+          const subId = `ent_${subName.toLowerCase()}`;
+          const objId = `ent_${objName.toLowerCase()}`;
+
+          kgStore.saveEntity({ id: subId, name: subName, type: "concept", createdAt: now, updatedAt: now });
+          kgStore.saveEntity({ id: objId, name: objName, type: "concept", createdAt: now, updatedAt: now });
+
+          kgStore.saveTriple({
+            id: `trip_${subId}_${objId}_${now}`,
+            subjectId: subId,
+            predicate: "associated_with",
+            objectId: objId,
+            confidence: finding.confidence,
+            sourceQuery: query,
+            createdAt: now,
+          });
+        }
+      }
+    }
+    logger.info({ findingCount: findings.length }, "[KnowledgeGraph] Successfully processed and stored knowledge memory");
   }
 }
 

@@ -14,13 +14,22 @@ export type ResearchQuery = z.infer<typeof ResearchQuery>;
 
 // ─── Discovered API Endpoint ───────────────────────────────────
 
+export interface WasmMetadata {
+  moduleUrl?: string;
+  exportedFunctions?: string[];
+  heapMemoryOffsets?: number[];
+  signatureHeaders?: Record<string, string>;
+  extractedUrls?: string[];
+  decompiledSnippet?: string;
+}
+
 export interface DiscoveredEndpoint {
   url: string;
   method: "GET" | "POST" | "PUT" | "DELETE";
   params?: Record<string, string>;
   headers?: Record<string, string>;
   bodyTemplate?: Record<string, unknown>;
-  authType?: "none" | "bearer" | "api-key" | "basic" | "oauth2";
+  authType?: "none" | "bearer" | "api-key" | "basic" | "oauth2" | "wasm-signature";
   authDetails?: {
     headerName?: string;
     tokenHint?: string;
@@ -28,12 +37,13 @@ export interface DiscoveredEndpoint {
   description?: string;
   responseExample?: unknown;
   /** Where this was discovered from */
-  source: "openapi-spec" | "docs-page" | "network-sniff" | "common-pattern" | "well-known";
+  source: "openapi-spec" | "docs-page" | "network-sniff" | "common-pattern" | "well-known" | "layer1-wasm" | "layer4-wasm" | string;
   confidence: number; // 0–1
   discoveredAt: number;
   lastUsedAt?: number;
   successCount: number;
   failCount: number;
+  wasmMetadata?: WasmMetadata;
 }
 
 // ─── Research Step ─────────────────────────────────────────────
@@ -85,6 +95,8 @@ export interface Finding {
   sourceUrls: string[];
   isContradictory?: boolean;
   contradictionReason?: string;
+  isStale?: boolean;
+  varianceWarning?: string;
 }
 
 export interface Evidence {
@@ -168,4 +180,76 @@ export interface AgentCapability {
   token: string;
   maxInputLength: number;
   estimatedDuration: number; // ms
+}
+
+// ─── Knowledge Graph & Vector Memory ────────────────────────────
+
+export interface KnowledgeEntity {
+  id: string;
+  name: string;
+  type: string; // e.g. "token", "protocol", "metric", "company", "concept"
+  description?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface KnowledgeTriple {
+  id: string;
+  subjectId: string;
+  predicate: string; // e.g. "depends_on", "provides_liquidity", "competes_with", "has_price"
+  objectId: string;
+  confidence: number;
+  sourceQuery?: string;
+  createdAt: number;
+}
+
+export interface VectorMemoryItem {
+  id: string;
+  claim: string;
+  vector: number[];
+  entityIds: string[];
+  sourceUrl?: string;
+  createdAt: number;
+}
+
+// ─── Self-Evolution Engine ──────────────────────────────────────
+
+export interface EvolutionLog {
+  id: string;
+  domain: string;
+  failedEndpointUrl: string;
+  errorCause: string;
+  synthesizedPatchCode?: string;
+  sandboxTestStatus: "passed" | "failed" | "skipped";
+  hotSwappedAt?: number;
+  createdAt: number;
+}
+
+// ─── Universal Entity & Asset Resolver Engine ───────────────────
+
+export interface FinancialAsset {
+  symbol: string;
+  assetType: "stock" | "crypto_token" | "perp_position" | "bond" | "commodity";
+  chainOrExchange: string; // Dynamic universal string supporting any global exchange, EVM/non-EVM blockchain or DEX
+  balanceOrShares: number;
+  valueUsd: number;
+  confidence: number;
+}
+
+export interface CorporateEntity {
+  companyName: string;
+  role: string; // e.g. "Founder", "CEO", "Major Shareholder", "Board Member"
+  equityPercentage?: number;
+  jurisdiction?: string;
+}
+
+export interface UniversalEntityProfile {
+  targetName: string;
+  category: "trader" | "executive" | "institution" | "individual";
+  verifiedAddresses: string[];
+  tradfiAssets: FinancialAsset[];
+  web3Positions: FinancialAsset[];
+  corporateAffiliations: CorporateEntity[];
+  overallConfidence: number;
 }

@@ -3,6 +3,7 @@ import { getEndpointCache } from "../cache/endpoint-cache.js";
 import { Browser, Page } from "playwright";
 import { getBrowserPool } from "../browser/pool.js";
 import { logger } from "../utils/logger.js";
+import { WasmParser } from "../utils/wasm-parser.js";
 import type { DiscoveredEndpoint } from "../types.js";
 
 interface CapturedRequest {
@@ -36,6 +37,7 @@ export class NetworkSniffer {
     logger.info({ url }, "[Layer 1] Starting network sniff");
 
     const captured: CapturedRequest[] = [];
+    const capturedWasmEndpoints: DiscoveredEndpoint[] = [];
     const now = Date.now();
 
     let page: Page | null = null;
@@ -47,10 +49,24 @@ export class NetworkSniffer {
 
       const context = await pool.createContext(browser);
 
-      // Stealth patches (raw string for ESM compatibility)
+      // Stealth patches & WASM runtime memory hooks
       await context.addInitScript(`
         Object.defineProperty(navigator, 'webdriver', { get: () => false });
         window.chrome = { runtime: {} };
+        window.__ultronWasmBuffers = [];
+        if (window.WebAssembly && window.WebAssembly.instantiate) {
+          const origInstantiate = window.WebAssembly.instantiate;
+          window.WebAssembly.instantiate = function(bytes, importObject) {
+            try {
+              let buf = bytes instanceof ArrayBuffer ? bytes : (bytes && bytes.buffer ? bytes.buffer : null);
+              if (buf) {
+                const arr = Array.from(new Uint8Array(buf.slice(0, Math.min(buf.byteLength, 100000))));
+                window.__ultronWasmBuffers.push(arr);
+              }
+            } catch(e) {}
+            return origInstantiate.apply(this, arguments);
+          };
+        }
       `);
 
       page = await context.newPage();
@@ -97,25 +113,50 @@ export class NetworkSniffer {
         }
       });
 
-      // ─── Navigate ───────────────────────────────────
-      logger.info({ url }, "[Layer 1] Navigating page...");
+      // Listen to live WebSocket connections & JSON stream frames
+      page.on("websocket", (ws) => {
+        const wsUrl = ws.url();
+        logger.info({ wsUrl }, "[Layer 1] Live WebSocket connection intercepted");
+
+        ws.on("framereceived", (event) => {
+          try {
+            const payload = String(event.payload || "");
+            if (payload.startsWith("{") || payload.startsWith("[")) {
+              captured.push({
+                url: wsUrl,
+                method: "WS_RECV",
+                requestHeaders: {},
+                responseBody: payload.substring(0, 5000),
+                status: 200,
+                contentType: "application/json; websocket",
+                isApiCall: true,
+              });
+            }
+          } catch {
+            // Ignore ws frame parsing errors
+          }
+        });
+      });
+
+      // ─── Navigate (Fast 5s Timeout) ─────────────────
+      logger.info({ url }, "[Layer 1] Navigating page (fast 5s limit)...");
       await page.goto(url, {
-        waitUntil: "networkidle",
-        timeout: config.browser.timeout,
+        waitUntil: "domcontentloaded",
+        timeout: 5000,
       });
 
       // Wait extra for lazy-loaded API calls
-      await page.waitForTimeout(2000);
+      await page.waitForTimeout(500);
 
       // Scroll to trigger more lazy loads
       await page.evaluate(`
         window.scrollTo(0, document.body.scrollHeight / 2);
       `);
-      await page.waitForTimeout(1000);
+      await page.waitForTimeout(300);
       await page.evaluate(`
         window.scrollTo(0, document.body.scrollHeight);
       `);
-      await page.waitForTimeout(1000);
+      await page.waitForTimeout(300);
 
       // ─── SPA Interaction: Click common interactive elements ───
       // This triggers lazy-loaded API calls that are only fired on user interaction
@@ -183,6 +224,40 @@ export class NetworkSniffer {
         }
       }
 
+      // ─── Extract Captured WASM Buffers ───────────────
+      try {
+        const rawBuffers = await page.evaluate(() => (window as any).__ultronWasmBuffers || []);
+        if (Array.isArray(rawBuffers) && rawBuffers.length > 0) {
+          logger.info({ count: rawBuffers.length }, "[Layer 1 WASM] Processing captured WASM modules from heap");
+          for (const rawArr of rawBuffers) {
+            const buf = Buffer.from(rawArr);
+            const analysis = WasmParser.parseWasmBuffer(buf, url);
+            for (const extractedUrl of analysis.extractedUrls) {
+              capturedWasmEndpoints.push({
+                url: extractedUrl,
+                method: "GET",
+                authType: Object.keys(analysis.signatureHeaders).length > 0 ? "wasm-signature" : "none",
+                description: `Extracted from WASM memory heap: ${analysis.exportedFunctions.slice(0, 3).join(", ")}`,
+                source: "layer1-wasm",
+                confidence: 0.9,
+                discoveredAt: now,
+                successCount: 0,
+                failCount: 0,
+                wasmMetadata: {
+                  moduleUrl: url,
+                  exportedFunctions: analysis.exportedFunctions,
+                  signatureHeaders: analysis.signatureHeaders,
+                  extractedUrls: analysis.extractedUrls,
+                  decompiledSnippet: analysis.decompiledSnippet,
+                },
+              });
+            }
+          }
+        }
+      } catch (e: any) {
+        logger.debug({ error: e.message }, "[Layer 1 WASM] Error extracting WASM buffers");
+      }
+
     } catch (err: any) {
       logger.warn({ url, error: err.message }, "[Layer 1] Navigation error");
     } finally {
@@ -203,6 +278,9 @@ export class NetworkSniffer {
     );
 
     const endpoints = this.processCapturedRequests(apiCalls, now);
+    if (typeof capturedWasmEndpoints !== "undefined" && capturedWasmEndpoints.length > 0) {
+      endpoints.push(...capturedWasmEndpoints);
+    }
 
     // Cache them
     if (endpoints.length > 0) {

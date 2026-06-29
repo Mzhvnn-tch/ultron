@@ -3,6 +3,8 @@ import { getEndpointCache, EndpointCache } from "../cache/endpoint-cache.js";
 import { getCredentialStore } from "../credentials/store.js";
 import { logger } from "../utils/logger.js";
 import type { DiscoveredEndpoint } from "../types.js";
+import YAML from "yaml";
+import { withExponentialBackoff } from "../utils/retry.js";
 
 // ─── Common API Patterns ───────────────────────────────────────
 
@@ -237,7 +239,7 @@ export class ApiDiscovery {
 
     for (const specEp of specEndpoints) {
       try {
-        const resp = await this.http.get(specEp.url);
+        const resp = await withExponentialBackoff(() => this.http.get(specEp.url), { maxRetries: 2 });
         if (resp.status !== 200) continue;
 
         let spec: any;
@@ -298,36 +300,14 @@ export class ApiDiscovery {
   }
 
   /**
-   * Basic YAML-like spec parsing for paths.
-   * Falls back to regex for cases where we don't have a YAML parser.
+   * Safe YAML spec parsing using official YAML parser.
    */
   private parseYamlLikeSpec(yamlText: string): any {
-    const paths: any = {};
-    const pathRegex = /^\s*(\/[^\s:]+):\s*$/gm;
-    const methodRegex = /^\s*(get|post|put|delete|patch):\s*$/gim;
-
-    let currentPath = "";
-    let currentMethod = "";
-
-    const lines = yamlText.split("\n");
-    for (const line of lines) {
-      const pathMatch = line.match(/^\s{0,2}(\/[^\s:]+):\s*$/);
-      if (pathMatch) {
-        currentPath = pathMatch[1];
-        paths[currentPath] = {};
-        continue;
-      }
-
-      if (currentPath) {
-        const methodMatch = line.match(/^\s{2,4}(get|post|put|delete|patch):\s*$/i);
-        if (methodMatch) {
-          currentMethod = methodMatch[1].toLowerCase();
-          paths[currentPath][currentMethod] = {};
-        }
-      }
+    try {
+      return YAML.parse(yamlText);
+    } catch {
+      return { paths: {} };
     }
-
-    return { paths };
   }
 
   private extractBaseUrl(specUrl: string): string {

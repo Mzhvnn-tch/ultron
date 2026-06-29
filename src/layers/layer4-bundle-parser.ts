@@ -30,6 +30,7 @@
 
 import { createHttpClient } from "../utils/http.js";
 import { logger } from "../utils/logger.js";
+import { WasmParser } from "../utils/wasm-parser.js";
 import { getEndpointCache } from "../cache/endpoint-cache.js";
 import type { DiscoveredEndpoint } from "../types.js";
 
@@ -1038,7 +1039,7 @@ export class BundleParser {
       headers: Object.keys(c.headers).length > 0 ? c.headers : undefined,
       bodyTemplate: c.bodyTemplate || undefined,
       description: c.description,
-      source: "network-sniff" as const,
+      source: c.sourceFile.endsWith(".wasm") ? "layer4-wasm" : "bundle-parser",
       confidence: c.confidence,
       discoveredAt: now,
       successCount: 0,

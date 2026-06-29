@@ -7,6 +7,7 @@ import { getValidityEngine } from "./pipeline/validity.js";
 import { getCapWrapper } from "./cap/wrapper.js";
 import { getEndpointCache } from "./cache/endpoint-cache.js";
 import { getBrowserPool } from "./browser/pool.js";
+import { getCodeBuilder } from "./agent/code-builder.js";
 import { ResearchQuery } from "./types.js";
 import type { Request, Response, NextFunction } from "express";
 
@@ -29,6 +30,42 @@ app.use((_req: Request, res: Response, next: NextFunction) => {
 
 app.options("*", (_req: Request, res: Response) => {
   res.sendStatus(204);
+});
+
+// ─── Optional API Key Security Authentication ─────────────
+
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const apiKey = process.env.ULTRON_API_KEY;
+  if (apiKey && req.path.startsWith("/research")) {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || authHeader !== `Bearer ${apiKey}`) {
+      res.status(401).json({ error: "Unauthorized: Invalid or missing API key" });
+      return;
+    }
+  }
+  next();
+});
+
+// ─── Observability & Prometheus Metrics Endpoint ───────────
+
+app.get("/metrics", (_req: Request, res: Response) => {
+  const memory = process.memoryUsage();
+  const cacheStats = getEndpointCache().stats();
+  const metrics = `
+# HELP ultron_uptime_seconds Process uptime in seconds
+# TYPE ultron_uptime_seconds gauge
+ultron_uptime_seconds ${process.uptime()}
+
+# HELP ultron_memory_heap_used_bytes Heap memory used in bytes
+# TYPE ultron_memory_heap_used_bytes gauge
+ultron_memory_heap_used_bytes ${memory.heapUsed}
+
+# HELP ultron_cached_endpoints_total Total cached API endpoints in SQLite
+# TYPE ultron_cached_endpoints_total gauge
+ultron_cached_endpoints_total ${cacheStats.totalEndpoints}
+  `.trim();
+  res.setHeader("Content-Type", "text/plain");
+  res.send(metrics);
 });
 
 // ─── Health Check ──────────────────────────────────────
@@ -230,6 +267,18 @@ app.post("/research/verify", async (req: Request, res: Response) => {
       message: err.message,
       durationMs: Date.now() - startTime,
     });
+  }
+});
+
+// ─── Autonomous Codebase Self-Upgrade Endpoint ───────
+
+app.get("/audit/codebase", async (_req: Request, res: Response) => {
+  try {
+    const builder = getCodeBuilder();
+    const report = await builder.auditCodebase();
+    res.json({ status: "success", report });
+  } catch (err: any) {
+    res.status(500).json({ error: "Codebase audit failed", message: err.message });
   }
 });
 

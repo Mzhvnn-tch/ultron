@@ -9,6 +9,7 @@ import { getQueryDecomposer } from "./decomposer.js";
 import { getSynthesizer } from "./synthesizer.js";
 import { getVerifier } from "./verifier.js";
 import { getKnowledgeRouter } from "../knowledge/router.js";
+import { getKnowledgeGraphStore } from "../cache/knowledge-graph.js";
 import { getCredentialStore } from "../credentials/store.js";
 import { getEndpointCache, EndpointCache } from "../cache/endpoint-cache.js";
 import { createHttpClient } from "../utils/http.js";
@@ -106,6 +107,32 @@ export class ResearchOrchestrator {
         totalSources: new Set(allFindings.flatMap(f => f.sourceUrls)).size,
         domainsVisited: [...domainsVisited],
       };
+    }
+
+    // ─── Phase 0.5: Knowledge Graph Memory Retrieval ───
+    try {
+      const kgStore = getKnowledgeGraphStore();
+      const similarClaims = kgStore.searchSimilarClaims(params.query, 3);
+      if (similarClaims.length > 0) {
+        logger.info({ count: similarClaims.length }, "[Orchestrator] Injected historical Knowledge Graph memory claims");
+        for (const sc of similarClaims) {
+          allFindings.push({
+            id: `kg_mem_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+            claim: `[Historical Memory Knowledge] ${sc.claim}`,
+            evidence: [{
+              text: sc.claim,
+              sourceUrl: sc.sourceUrl || "knowledge-graph-memory",
+              sourceTitle: "Knowledge Graph Historical Memory",
+              relevance: sc.score,
+              extractedAt: Date.now(),
+            }],
+            confidence: Math.min(0.9, sc.score),
+            sourceUrls: [sc.sourceUrl || "knowledge-graph-memory"],
+          });
+        }
+      }
+    } catch (err: any) {
+      logger.debug({ error: err.message }, "[Orchestrator] Knowledge Graph retrieval skipped");
     }
 
     // ─── Phase 1: Decompose Query ──────────────────────
@@ -230,9 +257,27 @@ export class ResearchOrchestrator {
     try {
       // Extract candidate domains from the query
       const domains = this.extractSearchTargets(query);
+      const candidateDomains = domains.slice(0, config.rateLimit.maxConcurrentDomains);
 
-      for (const domain of domains.slice(0, config.rateLimit.maxConcurrentDomains)) {
+      for (const domain of candidateDomains) {
         domainsVisited.add(domain);
+
+        // ── Fast-Path Cache Bypass Check ───────────────
+        const cache = getEndpointCache();
+        const cachedEndpoints = cache.getForDomain(domain);
+        if (cachedEndpoints.length > 0) {
+          const highConfEndpoints = cachedEndpoints.filter(ep => ep.confidence >= 0.4);
+          if (highConfEndpoints.length > 0) {
+            logger.info({ domain, cachedCount: highConfEndpoints.length }, "[Orchestrator] Fast-Path Cache Hit — querying backend APIs directly without browser");
+            const cachedFindings = await this.queryApiEndpoints(query, highConfEndpoints, domain);
+            if (cachedFindings.length > 0) {
+              step.findings.push(...cachedFindings);
+              step.usedEndpoints.push(...highConfEndpoints);
+              logger.info({ domain, findings: cachedFindings.length }, "[Orchestrator] Fast-Path Cache Bypass success — skipping browser layers");
+              continue;
+            }
+          }
+        }
 
         // ── Layer 0: API Discovery ─────────────────────
         if (preferApi) {
@@ -241,7 +286,6 @@ export class ResearchOrchestrator {
           const apiEndpoints = await apiDiscovery.discover(domain);
           step.discoveredEndpoints.push(...apiEndpoints);
 
-          // Try to use discovered API endpoints
           if (apiEndpoints.length > 0) {
             step.status = "fetching";
             const apiFindings = await this.queryApiEndpoints(
@@ -252,9 +296,7 @@ export class ResearchOrchestrator {
             step.usedEndpoints.push(...apiEndpoints.filter((ep) => ep.successCount > 0));
             step.findings.push(...apiFindings);
 
-            // If we got good data from API, skip browser layers
             if (apiFindings.length > 0) {
-              // Check if findings are real content or just HTML boilerplate from SPA shell
               const hasRealContent = apiFindings.some((f) => {
                 const claim = f.claim.toLowerCase();
                 const isBoilerplate = claim.length < 100
@@ -268,33 +310,23 @@ export class ResearchOrchestrator {
                   { domain, apiFindings: apiFindings.length },
                   "[Orchestrator] API-first success — skipping browser layers"
                 );
-                step.status = "done";
-                step.finishedAt = Date.now();
-                return step;
+                continue;
               }
-
-              logger.info(
-                { domain, apiFindings: apiFindings.length },
-                "[Orchestrator] API findings were boilerplate — falling through"
-              );
             }
           }
         }
 
         // ── Layer 1: Network Sniffing ──────────────────
         step.status = "discovering";
-        const cache = getEndpointCache();
         const cachedSniffed = cache.getForDomain(domain).filter(
           (ep) => ep.source === "network-sniff"
         );
 
         if (cachedSniffed.length === 0) {
-          // No cached sniffed endpoints → sniff now
           const sniffer = getNetworkSniffer();
           const sniffed = await sniffer.sniff(`https://${domain}`);
           step.sniffedEndpoints.push(...sniffed);
 
-          // Try querying sniffed endpoints
           if (sniffed.length > 0) {
             step.status = "fetching";
             const sniffFindings = await this.queryApiEndpoints(
@@ -305,7 +337,6 @@ export class ResearchOrchestrator {
             step.findings.push(...sniffFindings);
           }
         } else {
-          // Use cached sniffed endpoints
           const cachedFindings = await this.queryApiEndpoints(
             query,
             cachedSniffed,
@@ -320,8 +351,6 @@ export class ResearchOrchestrator {
           const scraper = getStealthScraper();
           const grounding = getCitationGrounding();
 
-          // Strategy A: Scrape the actual target domain directly (SPA-aware)
-          // This renders JavaScript, waits for content, extracts visible text
           const directUrl = `https://${domain}`;
           logger.info({ url: directUrl }, "[Orchestrator] Trying direct domain scrape");
 
@@ -336,22 +365,15 @@ export class ResearchOrchestrator {
             );
             step.findings.push(...directClaims);
 
-            // If direct scrape got meaningful content, skip Google
             if (directClaims.length > 0 && directPage.content.length > 200) {
               logger.info(
                 { domain, claims: directClaims.length, contentLen: directPage.content.length },
                 "[Orchestrator] Direct scrape successful — skipping Google fallback"
               );
             } else {
-              // Strategy B: Google search as fallback (only if direct scrape was empty)
-              logger.info(
-                { domain, contentLen: directPage.content.length },
-                "[Orchestrator] Direct scrape yielded little — trying Google"
-              );
               throw new Error("Direct scrape insufficient");
             }
-            } catch {
-            // Strategy B: Search fallback + Target Deep-Drill
+          } catch {
             try {
               const scrapedPage = await this.executeSearch(query, domain);
               step.scrapedData.push(scrapedPage);
@@ -363,7 +385,6 @@ export class ResearchOrchestrator {
               );
               step.findings.push(...claims);
 
-              // Target Deep-Drill: Use Tavily search pointers to deep-probe official APIs
               await this.executeTargetDeepDrill(scrapedPage, query, step, domainsVisited);
             } catch (searchErr: any) {
               logger.warn(
@@ -372,8 +393,6 @@ export class ResearchOrchestrator {
               );
             }
           }
-
-          step.finishedAt = Date.now();
         }
       }
 

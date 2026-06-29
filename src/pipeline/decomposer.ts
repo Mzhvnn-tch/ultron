@@ -1,5 +1,6 @@
 import { config } from "../config.js";
 import { logger } from "../utils/logger.js";
+import { getLLMProvider } from "../utils/llm-provider.js";
 
 // Current year for dynamic date generation
 const CURRENT_YEAR = new Date().getFullYear();
@@ -60,29 +61,11 @@ Rules:
 Example input: "What is the impact of AI on healthcare in 2024?"
 Example output: ["AI healthcare market size 2024 statistics", "AI medical diagnosis accuracy clinical trials 2024", "FDA approved AI medical devices 2024 list", "AI healthcare investment funding 2024", "AI doctor adoption rate hospitals 2024 survey"]`;
 
-    const response = await fetch(`${config.llm.baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${config.llm.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: config.llm.model,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: `Decompose this research query into up to ${maxSubQueries} sub-queries: "${query}"` },
-        ],
-        temperature: 0.3,
-        max_tokens: 500,
-      }),
+    const provider = getLLMProvider();
+    const content = await provider.complete({
+      systemPrompt,
+      prompt: `Decompose this research query into up to ${maxSubQueries} sub-queries: "${query}"`,
     });
-
-    if (!response.ok) {
-      throw new Error(`LLM API error: ${response.status}`);
-    }
-
-    const data = await response.json() as any;
-    const content = data.choices?.[0]?.message?.content || "";
 
     // Extract JSON array from response (handle markdown code blocks)
     const jsonMatch = content.match(/\[[\s\S]*\]/);
