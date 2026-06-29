@@ -158,7 +158,7 @@ cp .env.example .env
 
 | Variable | Description | Default / Example |
 |----------|-------------|-------------------|
-| `PORT` | HTTP REST API server port | `3001` |
+| `PORT` | HTTP REST API server port | `3002` |
 | `HOST` | HTTP REST API binding host | `0.0.0.0` |
 | `LLM_API_KEY` | OpenAI-compatible API key for decomposition & reasoning | `sk-...` |
 | `LLM_BASE_URL` | Base URL for LLM completions | `https://api.openai.com/v1` |
@@ -166,7 +166,7 @@ cp .env.example .env
 | `TAVILY_API_KEY` | Tavily Search API key for initial domain discovery | `tvly-...` |
 | `BROWSER_HEADLESS` | Run Playwright in headless mode | `true` |
 | `BROWSER_TIMEOUT` | Timeout in milliseconds for browser navigation & operations | `30000` |
-| `STEalth_MODE` | Enable bot-detection evasion in browser | `true` |
+| `STEALTH_MODE` | Enable bot-detection evasion in browser | `true` |
 | `CACHE_DB_PATH` | Path to SQLite endpoint database | `./data/endpoints.db` |
 | `CACHE_TTL_HOURS` | Retention period for cached API endpoints (in hours) | `720` |
 | `MAX_CONCURRENT_DOMAINS` | Maximum concurrent domain scrapers allowed | `5` |

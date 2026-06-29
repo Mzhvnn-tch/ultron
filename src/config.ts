@@ -3,7 +3,7 @@ dotenv.config();
 
 export const config = {
   server: {
-    port: parseInt(process.env.PORT || "3001"),
+    port: parseInt(process.env.PORT || "3002"),
     host: process.env.HOST || "0.0.0.0",
   },
 
